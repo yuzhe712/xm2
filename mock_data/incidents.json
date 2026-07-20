@@ -1,0 +1,72 @@
+[
+  {
+    "evidence_id": "ev_incident_payment_db_pool_001",
+    "source_type": "incident_history",
+    "source_id": "INC-2025-021",
+    "source_name": "mock incident history",
+    "observed_at": "2025-11-20T09:30:00+08:00",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "payment-service",
+    "incident_id": "INC-2025-021",
+    "root_cause": "database connection pool exhaustion",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "历史相似工单 INC-2025-021 的根因为数据库连接池耗尽，修复方式为扩容连接池并增加监控告警。"
+  },
+  {
+    "evidence_id": "ev_incident_payment_memory_001",
+    "source_type": "incident_history",
+    "source_id": "INC-2026-003",
+    "source_name": "mock incident history",
+    "observed_at": "2026-03-12T14:20:00+08:00",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "payment-service",
+    "incident_id": "INC-2026-003",
+    "root_cause": "memory leak in v1.8.0 — 长时间运行后 OOM 导致服务重启循环",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "v1.8.0 存在内存泄漏，运行 48 小时后 OOM。已通过 v1.8.2 修复。"
+  },
+  {
+    "evidence_id": "ev_incident_gateway_rate_limit_001",
+    "source_type": "incident_history",
+    "source_id": "INC-2025-045",
+    "source_name": "mock incident history",
+    "observed_at": "2025-08-03T16:45:00+08:00",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "gateway-service",
+    "incident_id": "INC-2025-045",
+    "root_cause": "rate limiting configuration error — 限流阈值配置错误导致正常请求被拒绝",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "gateway-service 限流配置错误，大批正常流量被拦截，通过回滚限流规则恢复。"
+  },
+  {
+    "evidence_id": "ev_incident_user_token_expiry_001",
+    "source_type": "incident_history",
+    "source_id": "INC-2026-015",
+    "source_name": "mock incident history",
+    "observed_at": "2026-05-28T11:10:00+08:00",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "user-service",
+    "incident_id": "INC-2026-015",
+    "root_cause": "JWT token expiration window misconfiguration — token有效期配置过短导致用户频繁掉线",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "user-service token 过期时间配置错误，用户频繁掉线。通过延长 token TTL 和增加刷新机制修复。"
+  },
+  {
+    "evidence_id": "ev_incident_order_db_lock_001",
+    "source_type": "incident_history",
+    "source_id": "INC-2026-028",
+    "source_name": "mock incident history",
+    "observed_at": "2026-06-15T09:55:00+08:00",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "order-service",
+    "incident_id": "INC-2026-028",
+    "root_cause": "database row-level lock contention — 批量订单更新时产生锁竞争导致创建接口阻塞",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "order-db 行锁竞争导致订单创建阻塞，通过优化批量更新 SQL 和增加索引修复。"
+  }
+]

@@ -1,0 +1,116 @@
+[
+  {
+    "evidence_id": "ev_sop_payment_timeout_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-PAYMENT-TIMEOUT",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "payment-service",
+    "sop_id": "SOP-PAYMENT-TIMEOUT",
+    "title": "支付服务超时处理 SOP",
+    "actions": [
+      "检查 payment-service 最近 30 分钟部署记录",
+      "查看 payment-db 连接池使用率和慢查询",
+      "检查 risk-control-service 延迟指标",
+      "若确认 v1.9.0 引入异常，回滚至 v1.8.2"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "支付服务超时告警的标准处理步骤。"
+  },
+  {
+    "evidence_id": "ev_sop_db_pool_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-DB-POOL-EXHAUSTION",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "payment-service",
+    "sop_id": "SOP-DB-POOL-EXHAUSTION",
+    "title": "数据库连接池耗尽处理 SOP",
+    "actions": [
+      "临时扩容 payment-db 连接池至 200",
+      "检查连接泄漏和未关闭连接",
+      "观察扩容后超时率和订单量恢复情况",
+      "确认恢复后将连接池配置写入代码仓库"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "数据库连接池耗尽的排查与缓解步骤。"
+  },
+  {
+    "evidence_id": "ev_sop_gateway_throttling_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-GATEWAY-THROTTLING",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "gateway-service",
+    "sop_id": "SOP-GATEWAY-THROTTLING",
+    "title": "API 网关限流异常处理 SOP",
+    "actions": [
+      "确认 5xx 错误率是否与限流规则变更时间重合",
+      "检查限流配置的阈值和生效范围",
+      "临时放宽限流阈值以恢复流量",
+      "与业务方确认 QPS 预期后调整限流规则"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "API 网关限流配置错误导致正常请求被拒的标准处理流程。"
+  },
+  {
+    "evidence_id": "ev_sop_user_auth_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-USER-AUTH-FAILURE",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "user-service",
+    "sop_id": "SOP-USER-AUTH-FAILURE",
+    "title": "用户认证失败率异常处理 SOP",
+    "actions": [
+      "检查最近部署的认证模块变更",
+      "查看 Redis 缓存命中率和连接状态",
+      "确认 JWT token 有效期和签名配置",
+      "若确认配置问题，回滚认证模块配置或代码"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "用户认证失败率突然升高的排查和处理流程。"
+  },
+  {
+    "evidence_id": "ev_sop_cpu_spike_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-CPU-SPIKE",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "order-service",
+    "sop_id": "SOP-CPU-SPIKE",
+    "title": "服务 CPU 飙升处理 SOP",
+    "actions": [
+      "通过 top/htop 定位 CPU 占用最高的进程和线程",
+      "检查 JVM GC 日志（如为 Java 服务）",
+      "查看近期是否有慢 SQL 或大事务",
+      "临时扩容实例数，观察负载分散效果"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "服务主机 CPU 使用率异常升高的排查与缓解流程。"
+  },
+  {
+    "evidence_id": "ev_sop_memory_leak_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-MEMORY-LEAK",
+    "source_name": "mock SOP library",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "service": "payment-service",
+    "sop_id": "SOP-MEMORY-LEAK",
+    "title": "内存泄漏排查与应急 SOP",
+    "actions": [
+      "抓取 heap dump 并分析大对象引用链",
+      "检查近期部署的版本是否有已知泄漏",
+      "临时设置 OOM 前自动重启（k8s liveness probe）",
+      "确认修复版本后规划紧急发布窗口"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "Java 服务内存持续增长导致 OOM 的标准排查流程。"
+  }
+]

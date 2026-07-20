@@ -1,0 +1,156 @@
+[
+  {
+    "evidence_id": "ev_kb_payment_timeout_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-PAYMENT-TIMEOUT",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "ops",
+    "service": "payment-service",
+    "article_id": "SOP-PAYMENT-TIMEOUT",
+    "title": "支付服务超时处理 SOP",
+    "actions": [
+      "检查 payment-service 最近 30 分钟部署记录",
+      "查看 payment-db 连接池使用率和慢查询",
+      "检查 risk-control-service 延迟指标",
+      "若确认 v1.9.0 引入异常，回滚至 v1.8.2"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "支付服务超时告警的标准处理步骤。"
+  },
+  {
+    "evidence_id": "ev_kb_db_pool_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-DB-POOL-EXHAUSTION",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "ops",
+    "service": "payment-service",
+    "article_id": "SOP-DB-POOL-EXHAUSTION",
+    "title": "数据库连接池耗尽处理 SOP",
+    "actions": [
+      "临时扩容 payment-db 连接池至 200",
+      "检查连接泄漏和未关闭连接",
+      "观察扩容后超时率和订单量恢复情况",
+      "确认恢复后将连接池配置写入代码仓库"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "数据库连接池耗尽的排查与缓解步骤。"
+  },
+  {
+    "evidence_id": "ev_kb_gateway_throttling_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-GATEWAY-THROTTLING",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "ops",
+    "service": "gateway-service",
+    "article_id": "SOP-GATEWAY-THROTTLING",
+    "title": "API 网关限流异常处理 SOP",
+    "actions": [
+      "确认 5xx 错误率是否与限流规则变更时间重合",
+      "检查限流配置的阈值和生效范围",
+      "临时放宽限流阈值以恢复流量"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "API 网关限流配置错误导致正常请求被拒的标准处理流程。"
+  },
+  {
+    "evidence_id": "ev_kb_user_auth_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-USER-AUTH-FAILURE",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "ops",
+    "service": "user-service",
+    "article_id": "SOP-USER-AUTH-FAILURE",
+    "title": "用户认证失败率异常处理 SOP",
+    "actions": [
+      "检查最近部署的认证模块变更",
+      "查看 Redis 缓存命中率和连接状态",
+      "确认 JWT token 有效期和签名配置"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "用户认证失败率突然升高的排查和处理流程。"
+  },
+  {
+    "evidence_id": "ev_kb_cpu_spike_001",
+    "source_type": "sop_document",
+    "source_id": "SOP-CPU-SPIKE",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "ops",
+    "service": "order-service",
+    "article_id": "SOP-CPU-SPIKE",
+    "title": "服务 CPU 飙升处理 SOP",
+    "actions": [
+      "通过 top/htop 定位 CPU 占用最高的进程",
+      "检查 JVM GC 日志",
+      "临时扩容实例数分散负载"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "服务主机 CPU 使用率异常升高的排查与缓解流程。"
+  },
+  {
+    "evidence_id": "ev_kb_support_network_001",
+    "source_type": "knowledge_article",
+    "source_id": "KB-SUPPORT-NETWORK-ACCESS",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "support",
+    "service": "internal-servicedesk",
+    "article_id": "KB-SUPPORT-NETWORK-ACCESS",
+    "title": "网络访问问题处理说明",
+    "actions": [
+      "确认用户所在办公网络和访问目标系统",
+      "检查 VPN、DNS 和代理配置是否符合内部标准",
+      "记录影响范围并交由网络支持团队复核"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "办公网或 VPN 访问内部系统异常时的标准处理步骤。"
+  },
+  {
+    "evidence_id": "ev_kb_support_account_001",
+    "source_type": "knowledge_article",
+    "source_id": "KB-SUPPORT-ACCOUNT-PERMISSION",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "support",
+    "service": "monitoring-console",
+    "article_id": "KB-SUPPORT-ACCOUNT-PERMISSION",
+    "title": "账号权限问题处理说明",
+    "actions": [
+      "确认申请人所属团队和申请系统",
+      "核对所需角色是否为只读、运维或管理员权限",
+      "提交内部权限开通记录并通知系统负责人复核"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "内部账号权限类请求的标准处理步骤。"
+  },
+  {
+    "evidence_id": "ev_kb_support_vpn_001",
+    "source_type": "knowledge_article",
+    "source_id": "KB-SUPPORT-VPN-ISSUE",
+    "source_name": "mock support knowledge base",
+    "retrieved_at": "2026-07-14T10:16:00+08:00",
+    "desk_scope": "support",
+    "service": "vpn-gateway",
+    "article_id": "KB-SUPPORT-VPN-ISSUE",
+    "title": "VPN 连接问题处理说明",
+    "actions": [
+      "确认用户 VPN 客户端版本是否最新",
+      "检查用户账号是否存在多设备同时登录",
+      "查看 VPN 网关当前连接数是否达上限"
+    ],
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "远程 VPN 连接失败或断开的排查与处理步骤。"
+  }
+]

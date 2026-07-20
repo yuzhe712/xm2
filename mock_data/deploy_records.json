@@ -1,0 +1,62 @@
+[
+  {
+    "evidence_id": "ev_deploy_payment_190",
+    "source_type": "deployment_record",
+    "source_id": "deploy_payment_v190_20260714_001",
+    "source_name": "mock deployment records",
+    "observed_at": "2026-07-14T10:20:00+08:00",
+    "retrieved_at": "2026-07-14T10:25:00+08:00",
+    "service": "payment-service",
+    "version": "v1.9.0",
+    "deployed_at": "2026-07-14T10:20:00+08:00",
+    "author": "backend-team",
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "payment-service v1.9.0 在告警前 5 分钟发布，包含数据库连接配置变更。"
+  },
+  {
+    "evidence_id": "ev_deploy_gateway_321",
+    "source_type": "deployment_record",
+    "source_id": "deploy_gateway_v321_20260714_001",
+    "source_name": "mock deployment records",
+    "observed_at": "2026-07-14T09:50:00+08:00",
+    "retrieved_at": "2026-07-14T10:25:00+08:00",
+    "service": "gateway-service",
+    "version": "v3.2.1",
+    "deployed_at": "2026-07-14T09:50:00+08:00",
+    "author": "infra-team",
+    "quality": "fresh",
+    "data_mode": "mock",
+    "summary": "gateway-service v3.2.1 在告警前 35 分钟发布，更新了限流规则引擎。"
+  },
+  {
+    "evidence_id": "ev_deploy_user_250",
+    "source_type": "deployment_record",
+    "source_id": "deploy_user_v250_20260713_001",
+    "source_name": "mock deployment records",
+    "observed_at": "2026-07-13T22:00:00+08:00",
+    "retrieved_at": "2026-07-14T10:25:00+08:00",
+    "service": "user-service",
+    "version": "v2.5.0",
+    "deployed_at": "2026-07-13T22:00:00+08:00",
+    "author": "platform-team",
+    "quality": "recent",
+    "data_mode": "mock",
+    "summary": "user-service v2.5.0 昨日晚间发布，更新了认证模块的 token 管理逻辑。"
+  },
+  {
+    "evidence_id": "ev_deploy_order_870",
+    "source_type": "deployment_record",
+    "source_id": "deploy_order_v870_20260712_001",
+    "source_name": "mock deployment records",
+    "observed_at": "2026-07-12T18:30:00+08:00",
+    "retrieved_at": "2026-07-14T10:25:00+08:00",
+    "service": "order-service",
+    "version": "v8.7.0",
+    "deployed_at": "2026-07-12T18:30:00+08:00",
+    "author": "trading-team",
+    "quality": "historical",
+    "data_mode": "mock",
+    "summary": "order-service v8.7.0 两天前发布，包含订单批量处理逻辑优化。"
+  }
+]
