@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install .
+RUN pip install --timeout 120 --retries 10 .
 
 COPY alembic.ini ./
 COPY migrations ./migrations

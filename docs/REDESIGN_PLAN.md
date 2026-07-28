@@ -1,6 +1,6 @@
 # IntelliTicket 产品与架构改造执行方案
 
-> 状态：P0-P3 已完成，P4 待执行
+> 状态：P0-P4 已完成，P5 待执行
 > 目标版本：v0.2.0  
 > 项目定位：单公司、单实例的 AI 增强型 IT 服务台  
 > 目标用户：企业员工、IT 运维人员、系统管理员  
@@ -624,13 +624,13 @@ frontend/src/renderer/src/styles.css
 
 任务：
 
-- [ ] 实现附件上传、下载、权限和安全校验。
-- [ ] 钉钉通知改为异步、可重试并记录发送结果。
-- [ ] 增加 PostgreSQL、Redis、API、Worker、Frontend/Nginx 的 Docker Compose。
-- [ ] 增加数据库和附件备份/恢复脚本。
-- [ ] 增加 `/health`、`/ready` 和 Prometheus 指标。
-- [ ] 增加 API 请求量、延迟、AI 任务量、失败率、队列长度和 SLA 超时指标。
-- [ ] 增加 Nginx 限流、上传大小限制和安全响应头。
+- [x] 实现附件上传、下载、权限和安全校验。
+- [x] 钉钉通知改为异步、可重试并记录发送结果。
+- [x] 增加 PostgreSQL、Redis、API、Worker、Frontend/Nginx 的 Docker Compose。
+- [x] 增加数据库和附件备份/恢复脚本。
+- [x] 增加 `/health`、`/ready` 和 Prometheus 指标。
+- [x] 增加 API 请求量、延迟、AI 任务量、失败率、队列长度和 SLA 超时指标。
+- [x] 增加 Nginx 限流、上传大小限制和安全响应头。
 
 验收：
 

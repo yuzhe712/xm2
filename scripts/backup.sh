@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
 
@@ -11,7 +11,7 @@ mkdir -p "$backup_root" "$attachment_root"
 temporary="$(mktemp -d "${backup_root}/.backup-${timestamp}-XXXXXX")"
 trap 'rm -rf -- "$temporary"' EXIT
 
-postgres_url="${DATABASE_URL/postgresql+psycopg/postgresql}"
+postgres_url="$(printf '%s' "$DATABASE_URL" | sed 's#^postgresql+psycopg://#postgresql://#')"
 pg_dump --dbname="$postgres_url" --format=custom --file="$temporary/database.dump"
 tar -czf "$temporary/attachments.tar.gz" -C "$attachment_root" .
 (

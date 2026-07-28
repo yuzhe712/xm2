@@ -12,8 +12,8 @@ x-backend-environment: &backend-environment
   CELERY_RESULT_BACKEND: redis://redis:6379/1
   CELERY_QUEUE_NAME: celery
   ATTACHMENT_STORAGE_DIR: /app/data/attachments
-  ATTACHMENT_MAX_BYTES: 26214400
-  FRONTEND_ALLOWED_ORIGINS: '["http://localhost:8080"]'
+  ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-26214400}
+  FRONTEND_ALLOWED_ORIGINS: '${FRONTEND_ALLOWED_ORIGINS:-["http://localhost:8080"]}'
   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
   DINGTALK_ENABLED: ${DINGTALK_ENABLED:-false}
   DINGTALK_OPERATOR_WEBHOOK_URL: ${DINGTALK_OPERATOR_WEBHOOK_URL:-}
@@ -111,6 +111,9 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        ELECTRON_MIRROR: ${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}
     depends_on:
       api:
         condition: service_healthy
@@ -122,6 +125,43 @@ services:
       timeout: 3s
       retries: 12
     restart: unless-stopped
+
+  backup:
+    profiles: ["maintenance"]
+    image: postgres:16-alpine
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    environment:
+      DATABASE_URL: postgresql://intelliticket:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/intelliticket
+      BACKUP_ROOT: /backups
+      ATTACHMENT_STORAGE_DIR: /attachments
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/scripts:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+      - attachments:/attachments:ro
+    restart: "no"
+
+  restore:
+    profiles: ["maintenance"]
+    image: postgres:16-alpine
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "exec /bin/sh /scripts/restore.sh \"$$RESTORE_SOURCE\""]
+    environment:
+      DATABASE_URL: postgresql://intelliticket:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/intelliticket
+      ATTACHMENT_STORAGE_DIR: /attachments
+      CONFIRM_RESTORE: ${CONFIRM_RESTORE:-NO}
+      RESTORE_SOURCE: ${RESTORE_SOURCE:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/scripts:ro
+      - ${BACKUP_DIR:-./backups}:/backups:ro
+      - attachments:/attachments
+    restart: "no"
 
 volumes:
   postgres-data:
