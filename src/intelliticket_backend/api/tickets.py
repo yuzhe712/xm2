@@ -19,6 +19,7 @@ from intelliticket_backend.schemas.ticket_history import (
     TicketLifecycleUpdateRequest,
 )
 from intelliticket_backend.schemas.tickets import (
+    DataMode,
     DeskId,
     TicketProcessRequest,
     TicketProcessResponse,
@@ -31,10 +32,15 @@ from intelliticket_backend.schemas.tickets import (
     TicketSubmitResponse,
 )
 from intelliticket_backend.schemas.users import CurrentUser
-from intelliticket_backend.services.auth import require_auth, require_operator
+from intelliticket_backend.services.auth import (
+    current_user_from_token,
+    require_auth,
+    require_operator,
+)
 from intelliticket_backend.services.notifications import (
     NotificationService,
 )
+from intelliticket_backend.services.permissions import ensure_ticket_visible
 from intelliticket_backend.services.ticket_processing import TicketProcessingService
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
@@ -43,7 +49,9 @@ knowledge_router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 
 
 @knowledge_router.get("/stats")
-def knowledge_stats() -> dict:
+def knowledge_stats(
+    _user: CurrentUser = Depends(require_operator),  # noqa: B008
+) -> dict:
     """知识库统计：案例总数、已确认数、建议 SOP 主题。"""
     from intelliticket_backend.services.case_retrieval import CaseRecord, CaseRetrieval, _tokenize
 
@@ -81,8 +89,13 @@ def _history_repository() -> TicketHistoryRepository:
     return TicketHistoryRepository(get_settings().ticket_history_db_path)
 
 
+def _configured_data_mode() -> DataMode:
+    return DataMode(get_settings().data_mode)
+
+
 @router.get("", response_model=TicketHistoryListResponse)
 def list_tickets(
+    _user: CurrentUser = Depends(require_operator),  # noqa: B008
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
     desk_id: Annotated[DeskId | None, Query()] = None,
@@ -102,9 +115,10 @@ def submit_ticket(
     result = service.history_repository.save_pending_ticket(
         ticket_id=ticket_id,
         text=request.text,
-        data_mode=request.data_mode.value,
+        data_mode=_configured_data_mode().value,
         desk_id=request.desk_id.value,
         submitter=user.user_id,
+        submitter_id=user.id,
     )
     _notify_operator_new_ticket(ticket_id=ticket_id, submitter=user.user_id, text=request.text)
     return TicketSubmitResponse.model_validate(result)
@@ -168,7 +182,7 @@ def preview_reprocess_ticket(
     return TicketProcessingService().process_ticket_preview(
         TicketProcessRequest(
             text=current.input_text,
-            data_mode=current.data_mode,
+            data_mode=_configured_data_mode(),
             desk_id=current.desk_id,
             operator_id=user.user_id,
         ),
@@ -194,7 +208,7 @@ def reprocess_ticket(
     TicketProcessingService().process_ticket(
         TicketProcessRequest(
             text=current.input_text,
-            data_mode=current.data_mode,
+            data_mode=_configured_data_mode(),
             desk_id=current.desk_id,
             operator_id=user.user_id,
         ),
@@ -323,6 +337,7 @@ def confirm_root_cause(
 @router.get("/{ticket_id}", response_model=TicketHistoryDetailResponse)
 def get_ticket(
     ticket_id: Annotated[str, Path(pattern=TICKET_ID_PATTERN)],
+    user: CurrentUser = Depends(require_auth),  # noqa: B008
 ) -> TicketHistoryDetailResponse:
     """按 ticket_id 查询已持久化的工单详情。"""
     result = _history_repository().get_ticket(ticket_id)
@@ -333,6 +348,7 @@ def get_ticket(
             status.HTTP_404_NOT_FOUND,
             {"ticket_id": ticket_id},
         )
+    ensure_ticket_visible(user, result.submitter)
     return result
 
 
@@ -342,6 +358,7 @@ def process_ticket(
     user: CurrentUser = Depends(require_operator),  # noqa: B008
 ) -> TicketProcessResponse:
     """处理自然语言运维告警工单。AI 诊断后自动归属给当前运维。"""
+    request.data_mode = _configured_data_mode()
     request.operator_id = user.user_id
     return TicketProcessingService().process_ticket(request)
 
@@ -349,6 +366,14 @@ def process_ticket(
 @router.websocket("/process/ws")
 async def process_ticket_ws(websocket: WebSocket) -> None:
     """通过 WebSocket 处理工单并推送 Agent 进度事件。"""
+    token = websocket.query_params.get("access_token", "")
+    user = current_user_from_token(token)
+    if user is None:
+        await websocket.close(code=4401, reason="authentication required")
+        return
+    if user.role not in {"operator", "admin"}:
+        await websocket.close(code=4403, reason="operator role required")
+        return
     await websocket.accept()
     sequence = 0
     ticket_id = TicketProcessingService()._make_id("TCK")
@@ -403,8 +428,9 @@ async def process_ticket_ws(websocket: WebSocket) -> None:
             result = TicketProcessingService().process_ticket(
                 TicketProcessRequest(
                     text=start.request.text,
-                    data_mode=start.request.data_mode,
+                    data_mode=_configured_data_mode(),
                     desk_id=start.request.desk_id,
+                    operator_id=user.user_id,
                 ),
                 progress_sink=progress_sink,
                 cancel_event=cancel_event,

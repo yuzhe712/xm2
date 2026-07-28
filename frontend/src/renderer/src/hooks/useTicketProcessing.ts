@@ -3,7 +3,6 @@ import { useCallback, useRef, useState } from 'react'
 import { createTicketProcessingSocket, previewReprocessTicket, processTicketRest, TicketApiError } from '../api/tickets'
 import type {
   ApiErrorPayload,
-  DataMode,
   DeskId,
   StoredAgentRun,
   TicketHistoryDetailResponse,
@@ -45,8 +44,6 @@ interface UseTicketProcessingResult {
   showPersistedDetail: (detail: TicketHistoryDetailResponse) => void
 }
 
-const DEFAULT_DATA_MODE: DataMode = 'real'
-
 function isTerminalMode(mode: ProcessingMode): boolean {
   return mode === 'completed' || mode === 'error' || mode === 'cancelled'
 }
@@ -80,7 +77,7 @@ export function useTicketProcessing(options: UseTicketProcessingOptions = {}): U
       resetRunState()
       setMode('rest-loading')
       try {
-        const response = await processTicketRest({ text, data_mode: DEFAULT_DATA_MODE, desk_id: deskId }, token, fetch, apiBaseUrl)
+        const response = await processTicketRest({ text, desk_id: deskId }, token, fetch, apiBaseUrl)
         setHistoryDetail(null)
         setStoredAgentRuns([])
         setResult(response)
@@ -117,7 +114,7 @@ export function useTicketProcessing(options: UseTicketProcessingOptions = {}): U
     (text: string, deskId: DeskId) => {
       resetRunState()
       setMode('ws-connecting')
-      const socket = createTicketProcessingSocket(apiBaseUrl)
+      const socket = createTicketProcessingSocket(token, apiBaseUrl)
       socketRef.current = socket
 
       socket.addEventListener('open', () => {
@@ -125,7 +122,7 @@ export function useTicketProcessing(options: UseTicketProcessingOptions = {}): U
         socket.send(
           JSON.stringify({
             type: 'start',
-            request: { text, data_mode: DEFAULT_DATA_MODE, desk_id: deskId },
+            request: { text, desk_id: deskId },
           }),
         )
       })
@@ -162,7 +159,7 @@ export function useTicketProcessing(options: UseTicketProcessingOptions = {}): U
         setMode((current) => (isTerminalMode(current) ? current : 'error'))
       })
     },
-    [apiBaseUrl, resetRunState],
+    [apiBaseUrl, token, resetRunState],
   )
 
   const showPersistedDetail = useCallback(

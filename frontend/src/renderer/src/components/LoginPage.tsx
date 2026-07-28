@@ -57,16 +57,6 @@ export default function LoginPage({ loading, error, onLogin }: LoginPageProps) {
         <button type="submit" className="button-primary login-button" disabled={loading}>
           {loading ? '登录中...' : '登录'}
         </button>
-
-        <div className="login-hint">
-          <p className="muted">预置账号：</p>
-          <p className="muted">
-            运维 — zhangsan / zhangsan123，lisi / lisi123
-          </p>
-          <p className="muted">
-            员工 — wangwu / wangwu123，zhaoliu / zhaoliu123
-          </p>
-        </div>
       </form>
     </div>
   )

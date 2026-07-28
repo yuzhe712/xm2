@@ -32,7 +32,7 @@ export function useTicketHistory(options: UseTicketHistoryOptions = {}): UseTick
     setLoading(true)
     setError(null)
     try {
-      const response = await listTickets(100, 0, fetch, apiBaseUrl, deskId)
+      const response = await listTickets(100, 0, token, fetch, apiBaseUrl, deskId)
       setItems(response.items)
       setTotal(response.total)
     } catch (err) {
@@ -40,20 +40,20 @@ export function useTicketHistory(options: UseTicketHistoryOptions = {}): UseTick
     } finally {
       setLoading(false)
     }
-  }, [apiBaseUrl, deskId])
+  }, [apiBaseUrl, deskId, token])
 
   const selectTicket = useCallback(async (ticketId: string) => {
     setLoading(true)
     setError(null)
     try {
-      return await getTicketDetail(ticketId, fetch, apiBaseUrl)
+      return await getTicketDetail(ticketId, token, fetch, apiBaseUrl)
     } catch (err) {
       setError(err instanceof Error ? err : new Error('历史工单详情查询失败'))
       return null
     } finally {
       setLoading(false)
     }
-  }, [apiBaseUrl])
+  }, [apiBaseUrl, token])
 
   const updateLifecycle = useCallback(async (ticketId: string, request: TicketLifecycleUpdateRequest) => {
     setLoading(true)

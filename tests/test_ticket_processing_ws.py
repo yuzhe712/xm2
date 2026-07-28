@@ -9,13 +9,20 @@ from intelliticket_backend.repositories.ticket_history import TicketHistoryRepos
 SAMPLE_TEXT = "线上支付服务出现超时告警，订单量从正常1000/min降到300/min"
 
 
-def test_ticket_processing_websocket_support_desk_is_persisted(tmp_path, monkeypatch) -> None:
+def websocket_url(auth: dict[str, str]) -> str:
+    token = auth["Authorization"].removeprefix("Bearer ")
+    return f"/api/v1/tickets/process/ws?access_token={token}"
+
+
+def test_ticket_processing_websocket_support_desk_is_persisted(
+    tmp_path, monkeypatch, operator_auth
+) -> None:
     get_settings.cache_clear()
     db_path = tmp_path / "history.sqlite3"
     monkeypatch.setenv("TICKET_HISTORY_DB_PATH", str(db_path))
     client = TestClient(app)
 
-    with client.websocket_connect("/api/v1/tickets/process/ws") as websocket:
+    with client.websocket_connect(websocket_url(operator_auth)) as websocket:
         websocket.send_json(
             {
                 "type": "start",
@@ -46,10 +53,10 @@ def test_ticket_processing_websocket_support_desk_is_persisted(tmp_path, monkeyp
     get_settings.cache_clear()
 
 
-def test_ticket_processing_websocket_streams_progress_and_completion() -> None:
+def test_ticket_processing_websocket_streams_progress_and_completion(operator_auth) -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/api/v1/tickets/process/ws") as websocket:
+    with client.websocket_connect(websocket_url(operator_auth)) as websocket:
         websocket.send_json(
             {
                 "type": "start",
@@ -92,10 +99,10 @@ def test_ticket_processing_websocket_streams_progress_and_completion() -> None:
             assert {ref["evidence_id"] for ref in event["evidence_refs"]} <= evidence_ids
 
 
-def test_ticket_processing_websocket_rejects_invalid_start_message() -> None:
+def test_ticket_processing_websocket_rejects_invalid_start_message(operator_auth) -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/api/v1/tickets/process/ws") as websocket:
+    with client.websocket_connect(websocket_url(operator_auth)) as websocket:
         websocket.send_json({"type": "start", "request": {"text": "   ", "data_mode": "mock"}})
         event = websocket.receive_json()
 
@@ -103,10 +110,14 @@ def test_ticket_processing_websocket_rejects_invalid_start_message() -> None:
     assert event["error"]["code"] == "WS_INVALID_START_MESSAGE"
 
 
-def test_ticket_processing_websocket_real_mode_completes_without_mock_evidence() -> None:
+def test_ticket_processing_websocket_real_mode_completes_without_mock_evidence(
+    monkeypatch, operator_auth
+) -> None:
+    monkeypatch.setenv("DATA_MODE", "real")
+    get_settings.cache_clear()
     client = TestClient(app)
 
-    with client.websocket_connect("/api/v1/tickets/process/ws") as websocket:
+    with client.websocket_connect(websocket_url(operator_auth)) as websocket:
         websocket.send_json(
             {
                 "type": "start",
@@ -125,12 +136,13 @@ def test_ticket_processing_websocket_real_mode_completes_without_mock_evidence()
         not (item.get("trace_uri") or "").startswith("mock_data/")
         for item in event["result"]["evidence"]
     )
+    get_settings.cache_clear()
 
 
-def test_ticket_processing_websocket_cancel_is_best_effort_after_start() -> None:
+def test_ticket_processing_websocket_cancel_is_best_effort_after_start(operator_auth) -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/api/v1/tickets/process/ws") as websocket:
+    with client.websocket_connect(websocket_url(operator_auth)) as websocket:
         websocket.send_json(
             {
                 "type": "start",

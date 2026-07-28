@@ -153,7 +153,7 @@ IntelliTicket 是一个面向企业内部 IT 运维与支持场景的**多 Agent
 | **桌面端** | Electron · React 18 · Vite · TypeScript |
 | **后端框架** | FastAPI · asyncio · Pydantic v2 |
 | **LLM 集成** | DeepSeek API（可配置切换）· 多模型路由与负载均衡 |
-| **数据存储** | SQLite（工单历史持久化）· JSON（mock 运维数据） |
+| **数据存储** | SQLAlchemy 2.0 · Alembic · PostgreSQL（生产）· SQLite（测试/兼容） |
 | **实时通信** | WebSocket（Agent 进度推送） |
 | **知识连接** | 飞书知识库 · 钉钉通知（可选扩展点） |
 | **工具协议** | MCP（Mock Ops 运维数据查询工具） |
@@ -231,6 +231,10 @@ cd 2.企业工单系统
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 
+# 在忽略提交的 .env 中设置 JWT_SECRET_KEY、DATABASE_URL，以及首次启动所需的
+# BOOTSTRAP_ADMIN_USERNAME / BOOTSTRAP_ADMIN_PASSWORD，然后执行迁移
+.\.venv\Scripts\python -m alembic upgrade head
+
 # 运行测试
 .\.venv\Scripts\python -m pytest
 
@@ -270,21 +274,31 @@ npm run dev
 ### 工单处理
 
 ```powershell
+$loginBody = @{
+  user_id = $env:INTELLITICKET_USERNAME
+  password = $env:INTELLITICKET_PASSWORD
+} | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/auth/login `
+  -ContentType "application/json" -Body $loginBody
+$headers = @{ Authorization = "Bearer $($login.token)" }
+
 $body = @{
   text = "线上支付服务出现超时告警，订单量从正常1000/min降到300/min"
-  data_mode = "mock"
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/tickets/process `
-  -ContentType "application/json" -Body $body
+  -Headers $headers -ContentType "application/json" -Body $body
 ```
+
+`data_mode` 由后端部署配置统一决定，客户端提交的同名字段不会改变运行模式。
 
 响应用于返回并持久化：`ticket_id`、`run_id`、分类、优先级、影响服务、上下文、根因候选、处理建议、workflow trace、Supervisor 路由决策、最终报告及全部证据条目。
 
 ### WebSocket 实时进度
 
 ```
-WS /api/v1/tickets/process/ws
+WS /api/v1/tickets/process/ws?access_token=<登录 token>
 ```
 
 事件流：`started → agent_progress × N → completed / failed / cancelled`
@@ -293,10 +307,12 @@ WS /api/v1/tickets/process/ws
 
 ```powershell
 # 分页列表
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/tickets?limit=20&offset=0
+Invoke-RestMethod -Headers $headers `
+  "http://127.0.0.1:8000/api/v1/tickets?limit=20&offset=0"
 
 # 单个工单
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/tickets/TCK-20260715-ABCDEF12
+Invoke-RestMethod -Headers $headers `
+  http://127.0.0.1:8000/api/v1/tickets/TCK-20260715-ABCDEF12
 ```
 
 ### Eval CLI
@@ -362,11 +378,12 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/tickets/TCK-20260715-ABCDEF12
 
 | 阶段 | 内容 |
 |------|------|
-| **v0.2** | 登录鉴权、操作员权限、审计日志 |
-| **v0.3** | 真实 Prometheus / Grafana 数据源接入 |
-| **v0.4** | Jira / 飞书工单系统双向集成 |
-| **v0.5** | LangGraph 动态编排、A2A 协议兼容 |
-| **v1.0** | Docker Compose 生产部署、Redis 缓存、Celery 异步任务队列 |
+| **P0（已完成）** | 数据库用户、角色权限、Alembic 迁移、部署密钥与服务端数据模式 |
+| **P1（待执行）** | 人工受理、原子认领、分派、评论、解决与确认关闭闭环 |
+| **P2（待执行）** | Redis/Celery AI 任务持久化与三阶段诊断流水线 |
+| **P3（待执行）** | 员工、运维、管理员角色化 Web 工作区 |
+| **P4（待执行）** | 附件、异步通知、Compose、健康检查与监控 |
+| **P5（待执行）** | 完整集成、故障、部署和真实压测验证 |
 
 ---
 

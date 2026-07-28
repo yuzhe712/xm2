@@ -83,6 +83,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 export async function listTickets(
   limit = 20,
   offset = 0,
+  token = '',
   fetcher: typeof fetch = fetch,
   baseUrl?: string,
   deskId?: DeskId,
@@ -91,16 +92,19 @@ export async function listTickets(
   url.searchParams.set('limit', String(limit))
   url.searchParams.set('offset', String(offset))
   if (deskId) url.searchParams.set('desk_id', deskId)
-  const response = await fetcher(url.toString())
+  const response = await fetcher(url.toString(), { headers: authHeaders(token) })
   return parseResponse<TicketHistoryListResponse>(response)
 }
 
 export async function getTicketDetail(
   ticketId: string,
+  token: string,
   fetcher: typeof fetch = fetch,
   baseUrl?: string,
 ): Promise<TicketHistoryDetailResponse> {
-  const response = await fetcher(ticketDetailUrl(ticketId, baseUrl))
+  const response = await fetcher(ticketDetailUrl(ticketId, baseUrl), {
+    headers: authHeaders(token),
+  })
   return parseResponse<TicketHistoryDetailResponse>(response)
 }
 
@@ -173,9 +177,8 @@ export async function getDeskKnowledge(
   deskId: DeskId,
   fetcher: typeof fetch = fetch,
   baseUrl?: string,
-  dataMode = 'real',
 ): Promise<KnowledgeResponse> {
-  const response = await fetcher(deskKnowledgeUrl(deskId, baseUrl, dataMode))
+  const response = await fetcher(deskKnowledgeUrl(deskId, baseUrl))
   return parseResponse<KnowledgeResponse>(response)
 }
 
@@ -226,8 +229,10 @@ export async function listPendingQueue(
 
 
 
-export function createTicketProcessingSocket(baseUrl?: string): WebSocket {
-  return new WebSocket(processTicketWsUrl(baseUrl))
+export function createTicketProcessingSocket(token: string, baseUrl?: string): WebSocket {
+  const url = new URL(processTicketWsUrl(baseUrl))
+  url.searchParams.set('access_token', token)
+  return new WebSocket(url.toString())
 }
 
 export {

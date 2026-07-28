@@ -44,6 +44,7 @@ class EvalContext:
             intake_agent_strategy="deterministic",
             diagnosis_agent_strategy="deterministic",
             support_reply_agent_strategy="deterministic",
+            knowledge_provider="mock",
         )
 
     def repository(self) -> MockOpsDataRepository:
@@ -102,9 +103,9 @@ def available_eval_cases() -> list[EvalCase]:
             _case_missing_sop,
         ),
         EvalCase(
-            "real-mode-fails-closed",
-            "real data mode 请求 fail-closed",
-            _case_real_mode_fails_closed,
+            "real-mode-excludes-mock-evidence",
+            "real data mode 不混入 mock 证据",
+            _case_real_mode_excludes_mock_evidence,
         ),
         EvalCase(
             "priority-boundary-p1-p2",
@@ -337,17 +338,22 @@ def _case_missing_sop(_context: EvalContext) -> list[str]:
     return ["recommended_team remains 支付系统运维组", "sop_refs is empty"]
 
 
-def _case_real_mode_fails_closed(context: EvalContext) -> list[str]:
+def _case_real_mode_excludes_mock_evidence(context: EvalContext) -> list[str]:
     service = TicketProcessingService(settings=context.settings())
-    try:
-        service.process_ticket(TicketProcessRequest(text=SAMPLE_TEXT, data_mode=DataMode.REAL))
-    except AppError as exc:
-        _ensure(
-            exc.code == "UNSUPPORTED_DATA_MODE",
-            "real mode should fail with UNSUPPORTED_DATA_MODE",
-        )
-        return ["real mode rejected", "error code UNSUPPORTED_DATA_MODE"]
-    raise AssertionError("real mode request unexpectedly succeeded")
+    response = service.process_ticket(
+        TicketProcessRequest(text=SAMPLE_TEXT, data_mode=DataMode.REAL)
+    )
+    _ensure(response.data_mode == DataMode.REAL, "response should remain in real mode")
+    _ensure(bool(response.evidence), "real mode should return evidence")
+    _ensure(
+        all(item.data_mode == DataMode.REAL for item in response.evidence),
+        "real mode must not contain mock evidence",
+    )
+    _ensure(
+        all(not (item.trace_uri or "").startswith("mock_data/") for item in response.evidence),
+        "real mode evidence must not reference mock_data",
+    )
+    return ["real mode completed", "all evidence is marked real"]
 
 
 def _case_priority_boundary(_context: EvalContext) -> list[str]:

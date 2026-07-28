@@ -59,7 +59,10 @@ def _payment_context():
 
 def test_eval_unknown_service_abstains_without_inventing_context(tmp_path) -> None:
     service = TicketProcessingService(
-        settings=Settings(ticket_history_db_path=tmp_path / "history.sqlite3")
+        settings=Settings(
+            ticket_history_db_path=tmp_path / "history.sqlite3",
+            knowledge_provider="mock",
+        )
     )
 
     result = service.process_ticket(
@@ -153,20 +156,27 @@ def test_eval_sop_missing_keeps_routing_explainable_without_sop_refs() -> None:
     assert any("未发现 SOP" in observation for observation in run.observations)
 
 
-def test_eval_real_mode_request_fails_closed(tmp_path) -> None:
+def test_eval_real_mode_request_excludes_mock_evidence(tmp_path) -> None:
     service = TicketProcessingService(
-        settings=Settings(ticket_history_db_path=tmp_path / "history.sqlite3")
+        settings=Settings(
+            ticket_history_db_path=tmp_path / "history.sqlite3",
+            knowledge_provider="mock",
+        )
     )
 
-    with pytest.raises(AppError) as exc_info:
-        service.process_ticket(
-            TicketProcessRequest(
-                text=SAMPLE_TEXT,
-                data_mode=DataMode.REAL,
-            )
+    response = service.process_ticket(
+        TicketProcessRequest(
+            text=SAMPLE_TEXT,
+            data_mode=DataMode.REAL,
         )
+    )
 
-    assert exc_info.value.code == "UNSUPPORTED_DATA_MODE"
+    assert response.data_mode == DataMode.REAL
+    assert response.evidence
+    assert {item.data_mode for item in response.evidence} == {DataMode.REAL}
+    assert all(
+        not (item.trace_uri or "").startswith("mock_data/") for item in response.evidence
+    )
 
 
 def test_eval_priority_boundary_is_explicit() -> None:

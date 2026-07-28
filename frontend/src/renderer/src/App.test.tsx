@@ -313,7 +313,14 @@ describe('App ServiceDesk navigation', () => {
     expect(screen.getByLabelText('搜索请求')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '未解决' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '新建请求' })).toBeInTheDocument()
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('desk_id=ops')))
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('desk_id=ops'),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+        }),
+      ),
+    )
   })
 
   it('opens support desk with support-only catalog as service scope reference', async () => {
@@ -324,7 +331,14 @@ describe('App ServiceDesk navigation', () => {
     expect(screen.queryByText('处理员工账号、权限申请、VPN、办公网和内部系统访问问题。')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '回复草稿' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '内部支持服务目录' })).toBeInTheDocument()
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('desk_id=support')))
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('desk_id=support'),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+        }),
+      ),
+    )
     expect(await screen.findByText('网络访问问题')).toBeInTheDocument()
     expect(screen.getByText('账号权限问题')).toBeInTheDocument()
     expect(screen.queryByText('支付服务告警')).not.toBeInTheDocument()

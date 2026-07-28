@@ -47,10 +47,19 @@ AGENT_TO_STEP = {
 TICKETS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS tickets (
     ticket_id TEXT PRIMARY KEY,
+    title TEXT DEFAULT NULL,
+    description TEXT DEFAULT NULL,
     desk_id TEXT NOT NULL DEFAULT 'ops' CHECK (desk_id IN ('ops', 'support')),
+    category TEXT DEFAULT NULL,
     input_text TEXT NOT NULL,
     data_mode TEXT NOT NULL CHECK (data_mode IN ('mock', 'demo', 'real')),
     submitter TEXT DEFAULT NULL,
+    submitter_id TEXT DEFAULT NULL,
+    assessed_priority TEXT DEFAULT NULL,
+    assessed_priority_reason TEXT DEFAULT NULL,
+    claimed_by TEXT DEFAULT NULL,
+    claimed_at TEXT DEFAULT NULL,
+    sla_deadline TEXT DEFAULT NULL,
     summary TEXT,
     affected_service TEXT,
     priority TEXT,
@@ -59,9 +68,19 @@ CREATE TABLE IF NOT EXISTS tickets (
         ticket_status IN ('pending', 'open', 'in_progress', 'resolved', 'closed', 'cancelled')
     ),
     assigned_team TEXT,
+    assigned_team_id TEXT DEFAULT NULL,
+    assignee_id TEXT DEFAULT NULL,
     resolution_summary TEXT,
+    root_cause TEXT DEFAULT NULL,
+    fix_action TEXT DEFAULT NULL,
+    verification TEXT DEFAULT NULL,
+    response_due_at TEXT DEFAULT NULL,
+    resolution_due_at TEXT DEFAULT NULL,
+    first_responded_at TEXT DEFAULT NULL,
+    resolved_at TEXT DEFAULT NULL,
     closed_at TEXT,
     latest_run_id TEXT DEFAULT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -685,148 +704,10 @@ class TicketHistoryRepository:
         with self._connect() as connection:
             connection.execute("PRAGMA foreign_keys = OFF")
             connection.executescript(TICKETS_TABLE_SQL)
-            self._migrate_tickets_table(connection)
-            self._migrate_runs_table(connection)
-            connection.executescript(DEPENDENT_SCHEMA_SQL)
-            self._migrate_agent_runs_table(connection)
-            connection.execute(CASE_LIBRARY_TABLE_SQL)
-            self._migrate_case_library_table(connection)
-            connection.execute("PRAGMA foreign_keys = ON")
-
-    def _migrate_tickets_table(self, connection: sqlite3.Connection) -> None:
-        columns = {
-            column["name"]
-            for column in connection.execute("PRAGMA table_info(tickets)").fetchall()
-        }
-        if "desk_id" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN desk_id TEXT NOT NULL DEFAULT 'ops'"
-            )
-        if "ticket_status" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN ticket_status TEXT NOT NULL DEFAULT 'open'"
-            )
-        if "assigned_team" not in columns:
-            connection.execute("ALTER TABLE tickets ADD COLUMN assigned_team TEXT")
-        if "resolution_summary" not in columns:
-            connection.execute("ALTER TABLE tickets ADD COLUMN resolution_summary TEXT")
-        if "closed_at" not in columns:
-            connection.execute("ALTER TABLE tickets ADD COLUMN closed_at TEXT")
-        if "submitter" not in columns:
-            connection.execute("ALTER TABLE tickets ADD COLUMN submitter TEXT DEFAULT NULL")
-        if "assessed_priority" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN assessed_priority TEXT DEFAULT NULL"
-            )
-        if "assessed_priority_reason" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN assessed_priority_reason TEXT DEFAULT NULL"
-            )
-        if "claimed_by" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN claimed_by TEXT DEFAULT NULL"
-            )
-        if "claimed_at" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN claimed_at TEXT DEFAULT NULL"
-            )
-        if "sla_deadline" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN sla_deadline TEXT DEFAULT NULL"
-            )
-        if "root_cause" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN root_cause TEXT DEFAULT NULL"
-            )
-        if "fix_action" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN fix_action TEXT DEFAULT NULL"
-            )
-        if "verification" not in columns:
-            connection.execute(
-                "ALTER TABLE tickets ADD COLUMN verification TEXT DEFAULT NULL"
-            )
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_desk_id ON tickets(desk_id)")
-
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tickets_submitter ON tickets(submitter)"
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tickets_ticket_status ON tickets(ticket_status)"
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tickets_assigned_team ON tickets(assigned_team)"
-        )
-
-    def _migrate_runs_table(self, connection: sqlite3.Connection) -> None:
-        row = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'runs'"
-        ).fetchone()
-        table_sql = row["sql"] if row else ""
-        columns = {
-            column["name"]
-            for column in connection.execute("PRAGMA table_info(runs)").fetchall()
-        }
-        if not row:
             connection.execute(RUNS_TABLE_SQL)
-            return
-        if (
-            "error_json" in columns
-            and "'failed'" in table_sql
-            and "'cancelled'" in table_sql
-            and "RESPONSE_JSON TEXT NOT NULL" not in table_sql.upper()
-        ):
-            return
-
-        connection.execute("PRAGMA legacy_alter_table = ON")
-        connection.execute("ALTER TABLE runs RENAME TO runs_old")
-        connection.execute(RUNS_TABLE_SQL)
-        connection.execute(
-            """
-            INSERT INTO runs (
-                run_id, ticket_id, status, data_mode, route_mode, started_at,
-                completed_at, response_json, error_json, agent_trace_json,
-                supervisor_decisions_json
-            )
-            SELECT run_id, ticket_id, status, data_mode, route_mode, started_at,
-                   completed_at, response_json, NULL, agent_trace_json,
-                   supervisor_decisions_json
-            FROM runs_old
-            """
-        )
-        connection.execute("DROP TABLE runs_old")
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_runs_ticket_id ON runs(ticket_id)")
-
-    def _migrate_agent_runs_table(self, connection: sqlite3.Connection) -> None:
-        columns = {
-            column["name"]
-            for column in connection.execute(
-                "PRAGMA table_info(agent_runs)"
-            ).fetchall()
-        }
-        if "react_steps_json" not in columns:
-            connection.execute(
-                "ALTER TABLE agent_runs ADD COLUMN react_steps_json"
-                " TEXT NOT NULL DEFAULT '[]'"
-            )
-
-    def _migrate_case_library_table(self, connection: sqlite3.Connection) -> None:
-        columns = {
-            column["name"]
-            for column in connection.execute("PRAGMA table_info(case_library)").fetchall()
-        }
-        if "data_mode" not in columns:
-            connection.execute(
-                "ALTER TABLE case_library ADD COLUMN data_mode TEXT NOT NULL DEFAULT 'mock'"
-            )
-        if "confirmed_root_cause" not in columns:
-            connection.execute(
-                "ALTER TABLE case_library ADD COLUMN confirmed_root_cause TEXT NOT NULL DEFAULT ''"
-            )
-        if "resolution" not in columns:
-            connection.execute(
-                "ALTER TABLE case_library ADD COLUMN resolution TEXT NOT NULL DEFAULT ''"
-            )
+            connection.executescript(DEPENDENT_SCHEMA_SQL)
+            connection.execute(CASE_LIBRARY_TABLE_SQL)
+            connection.execute("PRAGMA foreign_keys = ON")
 
     def save_case(
         self,
@@ -1024,6 +905,7 @@ class TicketHistoryRepository:
         data_mode: str,
         desk_id: str,
         submitter: str,
+        submitter_id: str | None = None,
         assessed_priority: str | None = None,
         assessed_priority_reason: str | None = None,
     ) -> dict[str, Any]:
@@ -1032,13 +914,14 @@ class TicketHistoryRepository:
             connection.execute(
                 """
                 INSERT INTO tickets (
-                    ticket_id, desk_id, input_text, data_mode, submitter, ticket_status,
+                    ticket_id, desk_id, input_text, data_mode, submitter, submitter_id,
+                    ticket_status,
                     assessed_priority, assessed_priority_reason,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
                 """,
                 (
-                    ticket_id, desk_id, text, data_mode, submitter,
+                    ticket_id, desk_id, text, data_mode, submitter, submitter_id,
                     assessed_priority, assessed_priority_reason,
                     now, now,
                 ),

@@ -23,7 +23,10 @@ def history_db(tmp_path, monkeypatch):
 def operator_auth() -> dict[str, str]:
     """Login as operator (zhangsan) and return Authorization header."""
     client = TestClient(app)
-    resp = client.post("/api/v1/auth/login", json={"user_id": "zhangsan", "password": "zhangsan123"})
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"user_id": "zhangsan", "password": "zhangsan123"},
+    )
     assert resp.status_code == 200, f"Login failed: {resp.json()}"
     token = resp.json()["token"]
     return {"Authorization": f"Bearer {token}"}
@@ -102,7 +105,11 @@ def test_empty_ticket_text_returns_validation_error(operator_auth) -> None:
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_real_data_mode_returns_real_evidence_without_mock_fallback(history_db, operator_auth) -> None:
+def test_real_data_mode_returns_real_evidence_without_mock_fallback(
+    history_db, operator_auth, monkeypatch
+) -> None:
+    monkeypatch.setenv("DATA_MODE", "real")
+    get_settings.cache_clear()
     client = TestClient(app)
 
     response = client.post(
@@ -115,7 +122,11 @@ def test_real_data_mode_returns_real_evidence_without_mock_fallback(history_db, 
     payload = response.json()
     assert payload["data_mode"] == "real"
     assert {item["data_mode"] for item in payload["evidence"]} == {"real"}
-    assert all(not (item.get("trace_uri") or "").startswith("mock_data/") for item in payload["evidence"])
+    assert all(
+        not (item.get("trace_uri") or "").startswith("mock_data/")
+        for item in payload["evidence"]
+    )
+    get_settings.cache_clear()
 
 
 def test_ticket_history_list_and_detail_return_persisted_ticket(history_db, operator_auth) -> None:
@@ -127,8 +138,8 @@ def test_ticket_history_list_and_detail_return_persisted_ticket(history_db, oper
     )
     ticket_id = process_response.json()["ticket_id"]
 
-    list_response = client.get("/api/v1/tickets")
-    detail_response = client.get(f"/api/v1/tickets/{ticket_id}")
+    list_response = client.get("/api/v1/tickets", headers=operator_auth)
+    detail_response = client.get(f"/api/v1/tickets/{ticket_id}", headers=operator_auth)
 
     assert list_response.status_code == 200
     listing = list_response.json()
@@ -165,9 +176,9 @@ def test_failed_processing_is_persisted_in_history(history_db, monkeypatch, oper
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "ORCHESTRATOR_STEP_LIMIT_EXCEEDED"
-    listing = client.get("/api/v1/tickets").json()
+    listing = client.get("/api/v1/tickets", headers=operator_auth).json()
     ticket_id = listing["items"][0]["ticket_id"]
-    detail = client.get(f"/api/v1/tickets/{ticket_id}").json()
+    detail = client.get(f"/api/v1/tickets/{ticket_id}", headers=operator_auth).json()
 
     assert listing["total"] == 1
     assert listing["items"][0]["status"] == "failed"
@@ -202,7 +213,7 @@ def test_ticket_history_list_paginates(history_db, operator_auth) -> None:
         )
         assert response.status_code == 200
 
-    response = client.get("/api/v1/tickets?limit=1&offset=1")
+    response = client.get("/api/v1/tickets?limit=1&offset=1", headers=operator_auth)
 
     assert response.status_code == 200
     payload = response.json()
@@ -236,9 +247,11 @@ def test_ticket_history_list_filters_by_desk_id(history_db, operator_auth) -> No
     assert support_payload["routing"]["recommended_team"] == "内部支持服务台"
     assert support_payload["support_result"]["recommended_team"] == "内部支持服务台"
     assert support_payload["ops_result"] is None
-    ops_listing = client.get("/api/v1/tickets?desk_id=ops").json()
-    support_listing = client.get("/api/v1/tickets?desk_id=support").json()
-    all_listing = client.get("/api/v1/tickets").json()
+    ops_listing = client.get("/api/v1/tickets?desk_id=ops", headers=operator_auth).json()
+    support_listing = client.get(
+        "/api/v1/tickets?desk_id=support", headers=operator_auth
+    ).json()
+    all_listing = client.get("/api/v1/tickets", headers=operator_auth).json()
 
     assert ops_listing["total"] == 1
     assert ops_listing["items"][0]["desk_id"] == "ops"
@@ -344,7 +357,7 @@ def test_preview_reprocess_ticket_does_not_update_latest_run(history_db, operato
         f"/api/v1/tickets/{ticket_id}/reprocess/preview",
         headers=operator_auth,
     )
-    detail = client.get(f"/api/v1/tickets/{ticket_id}").json()
+    detail = client.get(f"/api/v1/tickets/{ticket_id}", headers=operator_auth).json()
 
     assert response.status_code == 200
     payload = response.json()
@@ -389,7 +402,9 @@ def test_reprocess_unknown_ticket_returns_404(history_db, operator_auth) -> None
     assert response.json()["error"]["code"] == "TICKET_NOT_FOUND"
 
 
-def test_patch_ticket_lifecycle_updates_business_status_without_new_run(history_db, operator_auth) -> None:
+def test_patch_ticket_lifecycle_updates_business_status_without_new_run(
+    history_db, operator_auth
+) -> None:
     client = TestClient(app)
     process_response = client.post(
         "/api/v1/tickets/process",
@@ -430,26 +445,28 @@ def test_patch_unknown_ticket_returns_404(history_db, operator_auth) -> None:
     assert response.json()["error"]["code"] == "TICKET_NOT_FOUND"
 
 
-def test_invalid_desk_id_returns_validation_error(history_db) -> None:
+def test_invalid_desk_id_returns_validation_error(history_db, operator_auth) -> None:
     client = TestClient(app)
 
-    response = client.get("/api/v1/tickets?desk_id=unknown")
+    response = client.get("/api/v1/tickets?desk_id=unknown", headers=operator_auth)
 
     assert response.status_code == 422
 
 
-def test_ticket_history_detail_validates_ticket_id(history_db) -> None:
+def test_ticket_history_detail_validates_ticket_id(history_db, operator_auth) -> None:
     client = TestClient(app)
 
-    response = client.get("/api/v1/tickets/TCK-001")
+    response = client.get("/api/v1/tickets/TCK-001", headers=operator_auth)
 
     assert response.status_code == 422
 
 
-def test_ticket_history_detail_returns_404_for_unknown_ticket(history_db) -> None:
+def test_ticket_history_detail_returns_404_for_unknown_ticket(history_db, operator_auth) -> None:
     client = TestClient(app)
 
-    response = client.get("/api/v1/tickets/TCK-20260715-FFFFFFFF")
+    response = client.get(
+        "/api/v1/tickets/TCK-20260715-FFFFFFFF", headers=operator_auth
+    )
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "TICKET_NOT_FOUND"

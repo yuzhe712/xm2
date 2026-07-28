@@ -32,14 +32,19 @@ def verify_password(password: str, password_hash: str) -> bool:
 class UserRole:
     EMPLOYEE = "employee"
     OPERATOR = "operator"
+    ADMIN = "admin"
+    VALUES = {EMPLOYEE, OPERATOR, ADMIN}
 
 
 class User(BaseModel):
+    id: str | None = None
     user_id: str
     name: str = Field(..., min_length=1, max_length=60)
     role: str = Field(default=UserRole.EMPLOYEE)
     password_hash: str
     dingtalk_user_id: str | None = None
+    team_id: str | None = None
+    is_active: bool = True
 
 
 class LoginRequest(BaseModel):
@@ -55,8 +60,35 @@ class LoginResponse(BaseModel):
 
 
 class CurrentUser(BaseModel):
-    """从 token 解码出的当前用户。"""
+    """数据库回查后得到的当前有效用户。"""
 
+    id: str | None = None
     user_id: str
     name: str
     role: str
+    team_id: str | None = None
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: str
+    team_id: str | None = None
+    is_active: bool
+
+
+class UserCreateRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=60)
+    display_name: str = Field(..., min_length=1, max_length=60)
+    role: str = Field(default=UserRole.EMPLOYEE)
+    password: str = Field(..., min_length=12, max_length=128)
+    team_id: str | None = None
+
+
+class UserUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=60)
+    role: str | None = None
+    password: str | None = Field(default=None, min_length=12, max_length=128)
+    team_id: str | None = None
+    is_active: bool | None = None

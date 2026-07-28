@@ -39,7 +39,7 @@ describe('tickets api', () => {
       }),
     )
 
-    const result = await processTicketRest({ text: '测试工单', data_mode: 'mock', desk_id: 'ops' }, TEST_TOKEN, fetcher)
+    const result = await processTicketRest({ text: '测试工单', desk_id: 'ops' }, TEST_TOKEN, fetcher)
 
     expect(result.ticket_id).toBe('TCK-001')
     expect(fetcher).toHaveBeenCalledWith(
@@ -62,7 +62,7 @@ describe('tickets api', () => {
       ),
     )
 
-    await expect(processTicketRest({ text: '测试工单', data_mode: 'mock', desk_id: 'ops' }, TEST_TOKEN, fetcher)).rejects.toMatchObject({
+    await expect(processTicketRest({ text: '测试工单', desk_id: 'ops' }, TEST_TOKEN, fetcher)).rejects.toMatchObject({
       code: 'UNSUPPORTED_DATA_MODE',
       message: '当前仅支持 mock',
     } satisfies Partial<TicketApiError>)
@@ -125,10 +125,15 @@ describe('tickets api', () => {
         ),
       )
 
-    const listing = await listTickets(20, 0, fetcher, undefined, 'support')
-    const detail = await getTicketDetail('TCK-20260715-ABCDEF12', fetcher)
+    const listing = await listTickets(20, 0, TEST_TOKEN, fetcher, undefined, 'support')
+    const detail = await getTicketDetail('TCK-20260715-ABCDEF12', TEST_TOKEN, fetcher)
 
-    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('desk_id=support'))
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('desk_id=support'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
+      }),
+    )
     expect(listing.total).toBe(1)
     expect(detail.latest_run!.response?.ticket_id).toBe('TCK-001')
   })
@@ -184,7 +189,7 @@ describe('tickets api', () => {
       ),
     )
 
-    const detail = await getTicketDetail('TCK-20260715-ABCDEF12', fetcher)
+    const detail = await getTicketDetail('TCK-20260715-ABCDEF12', TEST_TOKEN, fetcher)
 
     expect(detail.latest_run!.response).toBeNull()
     expect(detail.latest_run!.error?.code).toBe('AGENT_TASK_FAILED')

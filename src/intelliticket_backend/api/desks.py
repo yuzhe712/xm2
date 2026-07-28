@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path
 
+from intelliticket_backend.config import get_settings
 from intelliticket_backend.schemas.service_desk import CatalogResponse, KnowledgeResponse
 from intelliticket_backend.schemas.tickets import DataMode, DeskId
 from intelliticket_backend.services.service_desk import ServiceDeskService
@@ -20,7 +21,8 @@ def get_desk_catalog(desk_id: Annotated[DeskId, Path()]) -> CatalogResponse:
 @router.get("/{desk_id}/knowledge", response_model=KnowledgeResponse)
 def get_desk_knowledge(
     desk_id: Annotated[DeskId, Path()],
-    data_mode: Annotated[DataMode, Query()] = DataMode.MOCK,
 ) -> KnowledgeResponse:
-    """查询指定服务台的知识库，默认返回本地 mock 知识。"""
-    return ServiceDeskService().get_knowledge(desk_id, data_mode=data_mode)
+    """按后端部署模式查询指定服务台的知识库。"""
+    return ServiceDeskService().get_knowledge(
+        desk_id, data_mode=DataMode(get_settings().data_mode)
+    )

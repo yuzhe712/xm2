@@ -33,10 +33,8 @@ export function deskCatalogUrl(deskId: string, baseUrl = apiBaseUrl): string {
   return `${normalizeApiBaseUrl(baseUrl)}/api/v1/desks/${encodeURIComponent(deskId)}/catalog`
 }
 
-export function deskKnowledgeUrl(deskId: string, baseUrl = apiBaseUrl, dataMode = 'real'): string {
-  const url = new URL(`${normalizeApiBaseUrl(baseUrl)}/api/v1/desks/${encodeURIComponent(deskId)}/knowledge`)
-  url.searchParams.set('data_mode', dataMode)
-  return url.toString()
+export function deskKnowledgeUrl(deskId: string, baseUrl = apiBaseUrl): string {
+  return `${normalizeApiBaseUrl(baseUrl)}/api/v1/desks/${encodeURIComponent(deskId)}/knowledge`
 }
 
 export function ticketDetailUrl(ticketId: string, baseUrl = apiBaseUrl): string {

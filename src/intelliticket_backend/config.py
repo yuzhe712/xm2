@@ -3,10 +3,19 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEVELOPMENT_JWT_SECRET = "development-only-change-this-jwt-secret"
+UNSAFE_BOOTSTRAP_PASSWORDS = {
+    "admin",
+    "admin123",
+    "changeme",
+    "intelliticket",
+    "password",
+}
 
 
 class Settings(BaseSettings):
@@ -14,7 +23,8 @@ class Settings(BaseSettings):
 
     app_name: str = "IntelliTicket Backend"
     app_version: str = "0.1.0"
-    data_mode: str = "mock"
+    app_env: Literal["development", "test", "production"] = "development"
+    data_mode: Literal["mock", "real"] = "mock"
     mock_data_dir: Path = Field(default=Path("mock_data"))
     llm_provider: str = "deepseek"
     llm_model: str = "deepseek-chat"
@@ -34,6 +44,11 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://127.0.0.1:5173", "http://localhost:5173"]
     )
     ticket_history_db_path: Path = Field(default=Path("data/intelliticket.sqlite3"))
+    database_url: SecretStr | None = None
+    jwt_secret_key: SecretStr = SecretStr(DEVELOPMENT_JWT_SECRET)
+    bootstrap_admin_username: str | None = Field(default=None, min_length=1, max_length=60)
+    bootstrap_admin_password: SecretStr | None = None
+    bootstrap_admin_display_name: str = Field(default="系统管理员", min_length=1, max_length=60)
     intelliticket_secret_file: Path | None = None
     dingtalk_webhook_url: SecretStr | None = None
     dingtalk_enabled: bool = False
@@ -51,9 +66,49 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    @model_validator(mode="after")
+    def validate_security_settings(self) -> Settings:
+        username = (self.bootstrap_admin_username or "").strip()
+        password = (
+            self.bootstrap_admin_password.get_secret_value().strip()
+            if self.bootstrap_admin_password is not None
+            else ""
+        )
+        if bool(username) != bool(password):
+            raise ValueError(
+                "BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD must be set together"
+            )
+
+        if self.app_env == "production":
+            jwt_secret = self.jwt_secret_key.get_secret_value().strip()
+            database_url = (
+                self.database_url.get_secret_value() if self.database_url is not None else ""
+            )
+            if jwt_secret == DEVELOPMENT_JWT_SECRET or len(jwt_secret) < 32:
+                raise ValueError(
+                    "production requires a non-default JWT_SECRET_KEY of at least 32 characters"
+                )
+            if not database_url.startswith(
+                ("postgresql://", "postgresql+psycopg://")
+            ):
+                raise ValueError("production requires a PostgreSQL DATABASE_URL")
+            if password.lower() in UNSAFE_BOOTSTRAP_PASSWORDS:
+                raise ValueError("production refuses an unsafe bootstrap administrator password")
+        return self
+
     @property
     def service_name(self) -> str:
         return "intelliticket-backend"
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        if self.database_url:
+            database_url = self.database_url.get_secret_value()
+            if database_url.startswith("postgresql://"):
+                return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            return database_url
+        database_path = self.ticket_history_db_path.resolve().as_posix()
+        return f"sqlite+pysqlite:///{database_path}"
 
     @property
     def resolved_deepseek_api_key(self) -> SecretStr | None:

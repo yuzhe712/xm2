@@ -51,7 +51,7 @@ export default function EmployeeDashboard({ token, userName, onTicketSelect, ref
     setOkResult(null)
     const full = `【${category || cats[0]}】${title.trim()}\n\n${description.trim()}`
     try {
-      const r = await submitTicket({ text: full, data_mode: 'mock', desk_id: deskId }, token)
+      const r = await submitTicket({ text: full, desk_id: deskId }, token)
       setOkResult({ id: r.ticket_id, priority: '', reason: '' })
       setTitle('')
       setDescription('')

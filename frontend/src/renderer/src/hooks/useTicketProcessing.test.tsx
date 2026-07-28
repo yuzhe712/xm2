@@ -128,12 +128,17 @@ describe('useTicketProcessing', () => {
 
   it('uses the active backend URL for WebSocket processing', () => {
     const { result } = renderHook(() =>
-      useTicketProcessing({ apiBaseUrl: 'https://tickets.example.com/api-root/' }),
+      useTicketProcessing({
+        apiBaseUrl: 'https://tickets.example.com/api-root/',
+        token: 'socket-token',
+      }),
     )
 
     act(() => result.current.runWebSocket('测试工单', 'support'))
 
-    expect(MockWebSocket.instances[0].url).toBe('wss://tickets.example.com/api-root/api/v1/tickets/process/ws')
+    expect(MockWebSocket.instances[0].url).toBe(
+      'wss://tickets.example.com/api-root/api/v1/tickets/process/ws?access_token=socket-token',
+    )
   })
 
   it('sends cancel message with best-effort reason', () => {

@@ -4,6 +4,8 @@ import sqlite3
 from threading import Event
 
 import pytest
+from alembic import command
+from alembic.config import Config
 
 from intelliticket_backend.repositories.ticket_history import TicketHistoryRepository
 from intelliticket_backend.schemas.tickets import DataMode, DeskId, TicketProcessRequest
@@ -13,6 +15,12 @@ from intelliticket_backend.services.orchestrator import (
 )
 
 SAMPLE_TEXT = "线上支付服务出现超时告警，订单量从正常1000/min降到300/min"
+
+
+def upgrade_legacy_database(db_path) -> None:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite+pysqlite:///{db_path.as_posix()}")
+    command.upgrade(config, "head")
 
 
 def make_run_result():
@@ -264,6 +272,7 @@ def test_repository_migrates_case_library_data_mode_as_mock(tmp_path) -> None:
             """
         )
 
+    upgrade_legacy_database(db_path)
     repository = TicketHistoryRepository(db_path)
     cases = repository.load_all_cases(DataMode.MOCK.value)
 
@@ -303,6 +312,7 @@ def test_repository_migrates_completed_only_runs_table(tmp_path) -> None:
             """
         )
 
+    upgrade_legacy_database(db_path)
     repository = TicketHistoryRepository(db_path)
     request = TicketProcessRequest(text=SAMPLE_TEXT, data_mode=DataMode.MOCK)
     cancel_event = Event()

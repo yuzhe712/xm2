@@ -18,7 +18,6 @@ export interface LoginResponse {
 
 export interface TicketSubmitRequest {
   text: string
-  data_mode: DataMode
   desk_id: DeskId
 }
 
@@ -110,7 +109,6 @@ export interface KnowledgeResponse {
 
 export interface TicketProcessRequest {
   text: string
-  data_mode: DataMode
   desk_id: DeskId
 }
 
