@@ -6,8 +6,11 @@ from intelliticket_backend.celery_app import celery_app
 from intelliticket_backend.config import get_settings
 from intelliticket_backend.db import session_scope
 from intelliticket_backend.errors import AppError
+from intelliticket_backend.metrics import AI_TASKS
 from intelliticket_backend.repositories.ai_runs import AiRunRepository
+from intelliticket_backend.repositories.notifications import NotificationDeliveryRepository
 from intelliticket_backend.services.ai_pipeline import AiPipeline, AiPipelineInput
+from intelliticket_backend.services.notifications import DingTalkNotifier, NotificationPayload
 
 RETRYABLE_CODES = {
     "INTAKE_LLM_FAILED",
@@ -21,6 +24,7 @@ RETRYABLE_CODES = {
 @celery_app.task(bind=True, name="intelliticket.process_ai_run")
 def process_ai_run(task: Task, run_id: str) -> dict:
     settings = get_settings()
+    AI_TASKS.labels(outcome="started").inc()
     task_id = getattr(task.request, "id", None)
     with session_scope() as session:
         repository = AiRunRepository(session)
@@ -57,6 +61,7 @@ def process_ai_run(task: Task, run_id: str) -> dict:
                 terminal=not retryable,
             )
         if retryable:
+            AI_TASKS.labels(outcome="retried").inc()
             countdown = settings.ai_task_retry_backoff_seconds * (2**retries)
             raise task.retry(
                 exc=exc,
@@ -66,6 +71,7 @@ def process_ai_run(task: Task, run_id: str) -> dict:
         with session_scope() as session:
             failed = AiRunRepository(session).get(run_id)
             assert failed is not None
+            AI_TASKS.labels(outcome="failed").inc()
             return AiRunRepository.to_response(failed).model_dump(mode="json")
     except Exception as exc:
         retries = int(getattr(task.request, "retries", 0))
@@ -78,6 +84,7 @@ def process_ai_run(task: Task, run_id: str) -> dict:
                 terminal=not retryable,
             )
         if retryable:
+            AI_TASKS.labels(outcome="retried").inc()
             countdown = settings.ai_task_retry_backoff_seconds * (2**retries)
             raise task.retry(
                 exc=exc,
@@ -87,6 +94,7 @@ def process_ai_run(task: Task, run_id: str) -> dict:
         with session_scope() as session:
             failed = AiRunRepository(session).get(run_id)
             assert failed is not None
+            AI_TASKS.labels(outcome="failed").inc()
             return AiRunRepository.to_response(failed).model_dump(mode="json")
 
     with session_scope() as session:
@@ -99,6 +107,7 @@ def process_ai_run(task: Task, run_id: str) -> dict:
             completion_tokens=output.completion_tokens,
             duration_ms=output.duration_ms,
         )
+        AI_TASKS.labels(outcome="completed").inc()
         return AiRunRepository.to_response(completed).model_dump(mode="json")
 
 
@@ -107,6 +116,7 @@ def dispatch_ai_run(run_id: str) -> str | None:
     try:
         result = process_ai_run.apply_async(args=[run_id])
     except Exception as exc:
+        AI_TASKS.labels(outcome="enqueue_failed").inc()
         with session_scope() as session:
             AiRunRepository(session).fail(
                 run_id,
@@ -114,6 +124,77 @@ def dispatch_ai_run(run_id: str) -> str | None:
                 f"AI task could not be enqueued: {type(exc).__name__}",
             )
         return None
+    AI_TASKS.labels(outcome="queued").inc()
     with session_scope() as session:
         AiRunRepository(session).mark_dispatched(run_id, result.id)
+    return result.id
+
+
+@celery_app.task(bind=True, name="intelliticket.send_dingtalk_notification")
+def send_dingtalk_notification(task: Task, delivery_id: str) -> dict:
+    settings = get_settings()
+    with session_scope() as session:
+        repository = NotificationDeliveryRepository(session)
+        delivery = repository.mark_attempt(delivery_id)
+        if delivery is None:
+            raise AppError(
+                "NOTIFICATION_NOT_FOUND",
+                "通知投递记录不存在",
+                404,
+                {"delivery_id": delivery_id},
+            )
+        if delivery.status in {"sent", "skipped"}:
+            return {"id": delivery.id, "status": delivery.status}
+        target = delivery.target
+        payload = NotificationPayload(**delivery.payload_json)
+
+    webhook = (
+        settings.dingtalk_operator_webhook_url
+        if target == "operator"
+        else settings.dingtalk_employee_webhook_url
+    )
+    if not settings.dingtalk_enabled or webhook is None:
+        with session_scope() as session:
+            NotificationDeliveryRepository(session).finish(
+                delivery_id,
+                "skipped",
+                "DingTalk notification target is not configured",
+            )
+        return {"id": delivery_id, "status": "skipped"}
+
+    result = DingTalkNotifier(webhook_url=webhook).send(payload)
+    retries = int(getattr(task.request, "retries", 0))
+    retryable = (
+        result.status == "failed"
+        and retries < settings.notification_task_max_retries
+    )
+    with session_scope() as session:
+        repository = NotificationDeliveryRepository(session)
+        if retryable:
+            repository.mark_retry(delivery_id, result.message or "DingTalk send failed")
+        else:
+            repository.finish(delivery_id, result.status, result.message)
+    if retryable:
+        countdown = settings.notification_task_retry_backoff_seconds * (2**retries)
+        raise task.retry(
+            exc=RuntimeError(result.message or "DingTalk send failed"),
+            countdown=countdown,
+            max_retries=settings.notification_task_max_retries,
+        )
+    return {"id": delivery_id, "status": result.status, "message": result.message}
+
+
+def dispatch_notification(delivery_id: str) -> str | None:
+    try:
+        result = send_dingtalk_notification.apply_async(args=[delivery_id])
+    except Exception as exc:
+        with session_scope() as session:
+            NotificationDeliveryRepository(session).finish(
+                delivery_id,
+                "failed",
+                f"Notification task could not be enqueued: {type(exc).__name__}",
+            )
+        return None
+    with session_scope() as session:
+        NotificationDeliveryRepository(session).mark_dispatched(delivery_id, result.id)
     return result.id

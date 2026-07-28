@@ -11,3 +11,4 @@ frontend/.vite/
 frontend/coverage/
 data/*.sqlite3
 data/*.db
+data/attachments/

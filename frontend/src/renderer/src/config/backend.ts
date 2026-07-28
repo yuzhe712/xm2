@@ -1,11 +1,16 @@
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000'
 
+const sameOriginApiBaseUrl =
+  typeof window !== 'undefined' && ['http:', 'https:'].includes(window.location.protocol)
+    ? window.location.origin
+    : DEFAULT_API_BASE_URL
+
 export function normalizeApiBaseUrl(value: string): string {
   return value.trim().replace(/\/$/, '')
 }
 
 export const apiBaseUrl = normalizeApiBaseUrl(
-  import.meta.env.VITE_INTELLITICKET_API_BASE_URL || DEFAULT_API_BASE_URL,
+  import.meta.env.VITE_INTELLITICKET_API_BASE_URL || sameOriginApiBaseUrl,
 )
 
 export function ticketListUrl(baseUrl = apiBaseUrl): string {

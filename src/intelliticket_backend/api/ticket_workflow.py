@@ -24,7 +24,9 @@ from intelliticket_backend.schemas.workflow import (
     TriageCompleteRequest,
 )
 from intelliticket_backend.services.auth import require_admin, require_auth, require_operator
+from intelliticket_backend.services.notifications import NotificationPayload, queue_notification
 from intelliticket_backend.services.ticket_workflow import TicketWorkflowService
+from intelliticket_backend.services.worker_tasks import dispatch_notification
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["ticket-workflow"])
 TicketId = Annotated[str, Path(pattern=TICKET_ID_PATTERN)]
@@ -112,7 +114,24 @@ def resolve_ticket(
     user: CurrentUser = Depends(require_operator),  # noqa: B008
     session: Session = Depends(get_db),  # noqa: B008
 ) -> TicketWorkflowResponse:
-    return TicketWorkflowService(session).resolve(ticket_id, request, user)
+    result = TicketWorkflowService(session).resolve(ticket_id, request, user)
+    notification_id = queue_notification(
+        session,
+        ticket_id=ticket_id,
+        target="employee",
+        event_type="ticket_resolved",
+        payload=NotificationPayload(
+            ticket_id=ticket_id,
+            title="工单已解决",
+            summary=f"工单 {ticket_id} 已处理完成。\n处理结果：{result.resolution_summary}",
+            priority=result.priority or "P3",
+            affected_service=None,
+        ),
+    )
+    session.commit()
+    if notification_id is not None:
+        dispatch_notification(notification_id)
+    return result
 
 
 @router.post("/{ticket_id}/confirm", response_model=TicketWorkflowResponse)

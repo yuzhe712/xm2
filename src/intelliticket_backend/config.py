@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     orchestrator_route_mode: str = "deterministic"
     celery_broker_url: SecretStr = SecretStr("redis://localhost:6379/0")
     celery_result_backend: SecretStr = SecretStr("redis://localhost:6379/1")
+    celery_queue_name: str = "celery"
     celery_task_always_eager: bool = False
+    readiness_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
     ai_task_max_retries: int = Field(default=3, ge=0, le=10)
     ai_task_retry_backoff_seconds: int = Field(default=5, ge=0, le=3600)
     ai_task_stale_seconds: int = Field(default=900, ge=30)
@@ -62,6 +64,10 @@ class Settings(BaseSettings):
     dingtalk_enabled: bool = False
     dingtalk_operator_webhook_url: SecretStr | None = None
     dingtalk_employee_webhook_url: SecretStr | None = None
+    notification_task_max_retries: int = Field(default=3, ge=0, le=10)
+    notification_task_retry_backoff_seconds: int = Field(default=10, ge=0, le=3600)
+    attachment_storage_dir: Path = Field(default=Path("data/attachments"))
+    attachment_max_bytes: int = Field(default=25 * 1024 * 1024, ge=1)
     knowledge_provider: str = "mock"
     feishu_app_id: SecretStr | None = None
     feishu_app_secret: SecretStr | None = None

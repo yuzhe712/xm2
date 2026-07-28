@@ -114,7 +114,14 @@ label { display: grid; gap: 6px; color: #39443e; font-size: 13px; font-weight: 6
 .detail-layout { display: grid; gap: 18px; }
 .detail-layout.with-ai { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
 .detail-main { display: grid; min-width: 0; gap: 16px; }
-.ticket-overview, .conversation-section, .resolution-form, .timeline-section { padding: 20px; }
+.ticket-overview, .attachment-section, .conversation-section, .resolution-form, .timeline-section { padding: 20px; }
+.attachment-list { display: grid; gap: 8px; margin: 14px 0; }
+.attachment-list article { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.attachment-list article > div { display: grid; min-width: 0; gap: 3px; }
+.attachment-list strong { overflow-wrap: anywhere; }
+.attachment-list span { color: var(--muted); font-size: 11px; }
+.attachment-upload { display: flex; align-items: center; gap: 10px; }
+.attachment-upload input { min-width: 0; flex: 1; }
 .ticket-description { margin: 15px 0 20px; white-space: pre-wrap; line-height: 1.65; }
 .section-heading, .section-heading > div { display: flex; align-items: center; gap: 8px; }
 .section-heading { justify-content: space-between; }
@@ -237,6 +244,8 @@ label { display: grid; gap: 6px; color: #39443e; font-size: 13px; font-weight: 6
   .detail-title-row { align-items: flex-start; flex-direction: column; gap: 10px; }
   .fact-grid, .two-columns { grid-template-columns: 1fr; }
   .action-strip, .confirmation-panel, .secondary-action { align-items: stretch; flex-direction: column; }
+  .attachment-upload { align-items: stretch; flex-direction: column; }
+  .attachment-upload button { width: 100%; }
   .action-strip button, .confirmation-panel button, .secondary-action button, .secondary-action input { width: 100%; }
   .action-strip details { width: 100%; }
   .compact-form { position: static; width: 100%; margin-top: 8px; box-shadow: none; }

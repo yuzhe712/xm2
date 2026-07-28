@@ -35,12 +35,13 @@ from intelliticket_backend.services.auth import (
     require_operator,
 )
 from intelliticket_backend.services.notifications import (
-    NotificationService,
+    NotificationPayload,
+    queue_notification,
 )
 from intelliticket_backend.services.permissions import ensure_ticket_visible
 from intelliticket_backend.services.ticket_processing import TicketProcessingService
 from intelliticket_backend.services.ticket_workflow import TicketWorkflowService
-from intelliticket_backend.services.worker_tasks import dispatch_ai_run
+from intelliticket_backend.services.worker_tasks import dispatch_ai_run, dispatch_notification
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -170,11 +171,23 @@ def submit_ticket(
     ticket = TicketRepository(session).get(result.ticket_id)
     assert ticket is not None
     ai_run = AiRunRepository(session).create(ticket, get_settings(), user.id)
+    notification_id = queue_notification(
+        session,
+        ticket_id=result.ticket_id,
+        target="operator",
+        event_type="ticket_created",
+        payload=NotificationPayload(
+            ticket_id=result.ticket_id,
+            title=f"新工单 {result.ticket_id}",
+            summary=f"{user.user_id} 提交了工单：\n\n{request.text}",
+            priority=request.priority.value,
+            affected_service=None,
+        ),
+    )
     session.commit()
     task_id = dispatch_ai_run(ai_run.id)
-    _notify_operator_new_ticket(
-        ticket_id=result.ticket_id, submitter=user.user_id, text=request.text
-    )
+    if notification_id is not None:
+        dispatch_notification(notification_id)
     return TicketSubmitResponse(
         ticket_id=result.ticket_id,
         status=result.status,
@@ -345,65 +358,6 @@ def update_ticket_lifecycle(
             {"ticket_id": ticket_id},
         )
     return result
-
-
-def _notify_operator_new_ticket(ticket_id: str, submitter: str, text: str) -> None:
-    """员工提交工单后，通知运维群有新工单待处理。"""
-    settings = get_settings()
-    if not settings.dingtalk_enabled or settings.dingtalk_operator_webhook_url is None:
-        return
-    try:
-        from intelliticket_backend.services.notifications import (
-            DingTalkNotifier,
-            NotificationPayload,
-        )
-
-        notifier = DingTalkNotifier(
-            webhook_url=settings.dingtalk_operator_webhook_url
-        )
-        svc = NotificationService(notifiers=[notifier])
-        svc.send(
-            NotificationPayload(
-                ticket_id=ticket_id,
-                title=f"新工单 {ticket_id}",
-                summary=f"{submitter} 提交了工单：\n\n{text}",
-                priority="P3",
-                affected_service=None,
-                recommended_actions=[],
-            )
-        )
-    except Exception:
-        pass
-
-
-def _notify_employee_resolved(
-    ticket_id: str, submitter: str, resolution: str
-) -> None:
-    settings = get_settings()
-    if not settings.dingtalk_enabled or settings.dingtalk_employee_webhook_url is None:
-        return
-    try:
-        from intelliticket_backend.services.notifications import (
-            DingTalkNotifier,
-            NotificationPayload,
-        )
-
-        notifier = DingTalkNotifier(
-            webhook_url=settings.dingtalk_employee_webhook_url
-        )
-        svc = NotificationService(notifiers=[notifier])
-        svc.send(
-            NotificationPayload(
-                ticket_id=ticket_id,
-                title="工单已解决",
-                summary=f"您的工单 {ticket_id} 已由运维人员处理完成。\n处理结果：{resolution}",
-                priority="P3",
-                affected_service=None,
-                recommended_actions=[],
-            )
-        )
-    except Exception:
-        pass
 
 
 @router.patch("/{ticket_id}/feedback", response_model=TicketHistoryDetailResponse)

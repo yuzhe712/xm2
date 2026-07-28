@@ -19,6 +19,8 @@ dependencies = [
     "psycopg[binary]>=3.2.3",
     "celery[redis]>=5.4.0",
     "redis>=5.2.0",
+    "python-multipart>=0.0.18",
+    "prometheus-client>=0.21.1",
 ]
 
 [project.optional-dependencies]

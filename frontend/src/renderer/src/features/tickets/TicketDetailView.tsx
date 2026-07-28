@@ -1,14 +1,15 @@
-import { ArrowLeft, CheckCircle2, MessageSquare, RotateCcw, Send, UserRoundCheck, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, MessageSquare, Paperclip, RotateCcw, Send, Upload, UserRoundCheck, XCircle } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useAuth } from '../../app/AuthProvider'
 import { ApiClientError } from '../../api/client'
 import {
-  acceptTicket, addComment, cancelTicket, claimTicket, confirmTicket, decideAiRun, getAiRun, getComments,
-  getTicketRecord, getTimeline, getWorkflowTicket, reopenTicket, rerunAi, resolveTicket,
+  acceptTicket, addComment, cancelTicket, claimTicket, confirmTicket, decideAiRun, downloadAttachment,
+  getAiRun, getComments, getTicketRecord, getTimeline, getWorkflowTicket, listAttachments,
+  reopenTicket, rerunAi, resolveTicket, uploadAttachment,
 } from '../../api/workflow'
-import type { AiRun, CommentVisibility, TicketComment, TicketEvent, TicketDetailRecord, UserRole, WorkflowTicket } from '../../types/workflow'
+import type { AiRun, CommentVisibility, TicketAttachment, TicketComment, TicketEvent, TicketDetailRecord, UserRole, WorkflowTicket } from '../../types/workflow'
 import { AiSuggestionPanel } from './AiSuggestionPanel'
 import { formatDate, isOverdue, statusLabels } from './ticketPresentation'
 
@@ -18,6 +19,13 @@ const eventLabels: Record<string, string> = {
   ticket_claimed: '工单已认领', ticket_assigned: '工单已转派', comment_added: '添加公开回复',
   internal_note_added: '添加内部备注', ticket_resolved: '工单已解决', ticket_closed: '提交人确认关闭',
   ticket_reopened: '工单已重新打开', ticket_cancelled: '工单已取消', ai_rerun_queued: 'AI 重新分析已排队',
+  attachment_uploaded: '上传附件',
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function TicketDetailView({ ticketId, role, backTo }: { ticketId: string; role: UserRole; backTo: string }): JSX.Element {
@@ -27,6 +35,8 @@ export function TicketDetailView({ ticketId, role, backTo }: { ticketId: string;
   const [comments, setComments] = useState<TicketComment[]>([])
   const [timeline, setTimeline] = useState<TicketEvent[]>([])
   const [aiRun, setAiRun] = useState<AiRun | null>(null)
+  const [attachments, setAttachments] = useState<TicketAttachment[]>([])
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,14 +51,16 @@ export function TicketDetailView({ ticketId, role, backTo }: { ticketId: string;
     setLoading(true)
     setError(null)
     try {
-      const [workflow, commentItems, eventItems, detail] = await Promise.all([
+      const [workflow, commentItems, eventItems, detail, attachmentItems] = await Promise.all([
         getWorkflowTicket(ticketId, auth.token), getComments(ticketId, auth.token),
         getTimeline(ticketId, auth.token), getTicketRecord(ticketId, auth.token).catch(() => null),
+        listAttachments(ticketId, auth.token),
       ])
       setTicket(workflow)
       setComments(commentItems)
       setTimeline(eventItems)
       setRecord(detail)
+      setAttachments(attachmentItems)
       const runId = detail?.ai_run_id
       if (runId && role !== 'employee') {
         const persistedRun = await getAiRun(runId, auth.token).catch(() => null)
@@ -92,6 +104,28 @@ export function TicketDetailView({ ticketId, role, backTo }: { ticketId: string;
     void perform(() => addComment(ticketId, ticket.version, comment, visibility, auth.token!)).then(() => setComment(''))
   }
 
+  const saveAttachment = () => {
+    if (!attachmentFile || !auth.token) return
+    void perform(() => uploadAttachment(ticketId, attachmentFile, auth.token!))
+      .then(() => setAttachmentFile(null))
+  }
+
+  const saveDownload = async (attachment: TicketAttachment) => {
+    if (!auth.token) return
+    setError(null)
+    try {
+      const blob = await downloadAttachment(ticketId, attachment.id, auth.token)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = attachment.original_name
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '附件下载失败')
+    }
+  }
+
   if (loading && !ticket) return <div className="loading-panel">正在加载工单详情...</div>
   if (!ticket) return <div className="error-state"><strong>无法打开工单</strong><span>{error ?? '工单不存在或无权访问。'}</span><Link to={backTo}>返回列表</Link></div>
 
@@ -116,6 +150,12 @@ export function TicketDetailView({ ticketId, role, backTo }: { ticketId: string;
               <div><dt>响应时限</dt><dd className={isOverdue(ticket.response_due_at) && !ticket.first_responded_at ? 'sla-overdue' : ''}>{formatDate(ticket.response_due_at)}</dd></div>
               <div><dt>解决时限</dt><dd className={isOverdue(ticket.resolution_due_at) && !['resolved', 'closed'].includes(ticket.status) ? 'sla-overdue' : ''}>{formatDate(ticket.resolution_due_at)}</dd></div>
             </dl>
+          </section>
+
+          <section className="surface attachment-section">
+            <div className="section-heading"><div><Paperclip size={18} /><h2>附件</h2></div><span>{attachments.length} 个</span></div>
+            <div className="attachment-list">{attachments.length ? attachments.map((attachment) => <article key={attachment.id}><div><strong>{attachment.original_name}</strong><span>{formatBytes(attachment.size_bytes)} · {formatDate(attachment.created_at)}</span></div><button className="button-quiet" type="button" title="下载附件" onClick={() => void saveDownload(attachment)}><Download size={15} />下载</button></article>) : <p className="muted">暂无附件。</p>}</div>
+            <div className="attachment-upload"><input aria-label="选择附件" type="file" accept=".txt,.log,.pdf,.png,.jpg,.jpeg" onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)} /><button type="button" disabled={busy || !attachmentFile} onClick={saveAttachment}><Upload size={16} />上传</button></div>
           </section>
 
           {canOperate && (ticket.status === 'pending' || ticket.status === 'open') && <section className="surface action-strip">

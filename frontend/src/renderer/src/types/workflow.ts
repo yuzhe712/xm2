@@ -65,6 +65,17 @@ export interface TicketEvent {
   created_at: string
 }
 
+export interface TicketAttachment {
+  id: string
+  ticket_id: string
+  uploader_id: string
+  original_name: string
+  content_type: string
+  size_bytes: number
+  sha256: string
+  created_at: string
+}
+
 export interface AiRun {
   id: string
   ticket_id: string

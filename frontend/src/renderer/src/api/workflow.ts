@@ -1,6 +1,7 @@
 import type { TicketHistoryListResponse, TicketSubmitRequest, TicketSubmitResponse } from '../types/tickets'
-import type { AiRun, CommentVisibility, TicketComment, TicketEvent, TicketDetailRecord, WorkflowTicket } from '../types/workflow'
-import { apiRequest } from './client'
+import { apiBaseUrl } from '../config/backend'
+import type { AiRun, CommentVisibility, TicketAttachment, TicketComment, TicketEvent, TicketDetailRecord, WorkflowTicket } from '../types/workflow'
+import { ApiClientError, apiRequest } from './client'
 
 function command<T>(ticketId: string, action: string, body: object, token: string): Promise<T> {
   return apiRequest<T>(`/api/v1/tickets/${encodeURIComponent(ticketId)}/${action}`, {
@@ -48,6 +49,55 @@ export async function getTimeline(ticketId: string, token: string): Promise<Tick
     `/api/v1/tickets/${encodeURIComponent(ticketId)}/timeline`, {}, token,
   )
   return response.items
+}
+
+export async function listAttachments(ticketId: string, token: string): Promise<TicketAttachment[]> {
+  const response = await apiRequest<{ items: TicketAttachment[] }>(
+    `/api/v1/tickets/${encodeURIComponent(ticketId)}/attachments`, {}, token,
+  )
+  return response.items
+}
+
+export async function uploadAttachment(
+  ticketId: string,
+  file: File,
+  token: string,
+): Promise<TicketAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/tickets/${encodeURIComponent(ticketId)}/attachments`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form },
+  )
+  return parseAttachmentResponse<TicketAttachment>(response)
+}
+
+export async function downloadAttachment(
+  ticketId: string,
+  attachmentId: string,
+  token: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!response.ok) await parseAttachmentResponse<never>(response)
+  return response.blob()
+}
+
+async function parseAttachmentResponse<T>(response: Response): Promise<T> {
+  const payload = await response.json().catch(() => ({})) as {
+    error?: { code?: string; message?: string; details?: Record<string, unknown> }
+  }
+  if (!response.ok) {
+    throw new ApiClientError(
+      payload.error?.code ?? 'HTTP_ERROR',
+      payload.error?.message ?? `请求失败：${response.status}`,
+      response.status,
+      payload.error?.details,
+    )
+  }
+  return payload as T
 }
 
 export function addComment(

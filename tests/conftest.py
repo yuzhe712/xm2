@@ -19,6 +19,8 @@ def pytest_configure() -> None:
     os.environ["JWT_SECRET_KEY"] = "test-only-jwt-secret-with-at-least-32-characters"
     os.environ["CELERY_BROKER_URL"] = "memory://"
     os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
+    attachment_dir = Path(tempfile.gettempdir()) / f"intelliticket-attachments-{os.getpid()}"
+    os.environ["ATTACHMENT_STORAGE_DIR"] = str(attachment_dir)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -72,10 +74,19 @@ def relational_ticket_isolation(auth_database):
     yield
 
     from intelliticket_backend.db import session_scope
-    from intelliticket_backend.models import AiRun, Ticket, TicketComment, TicketEvent
+    from intelliticket_backend.models import (
+        AiRun,
+        Attachment,
+        NotificationDelivery,
+        Ticket,
+        TicketComment,
+        TicketEvent,
+    )
 
     with session_scope() as session:
         session.execute(delete(TicketEvent))
         session.execute(delete(TicketComment))
+        session.execute(delete(Attachment))
+        session.execute(delete(NotificationDelivery))
         session.execute(delete(AiRun))
         session.execute(delete(Ticket))

@@ -52,6 +52,7 @@ function installBackend(role: UserRole): void {
       return response({ items })
     }
     if (path.endsWith('/timeline')) return response({ items: [{ id: 'event-1', ticket_id: summary.ticket_id, actor_id: users.employee.id, actor: 'wangwu', event_type: 'ticket_created', from_status: null, to_status: 'pending', visibility: 'public', payload: {}, created_at: summary.created_at }] })
+    if (path.endsWith('/attachments')) return response({ items: [] })
     if (path === `/api/v1/tickets/${summary.ticket_id}`) return response({ ticket_id: summary.ticket_id, desk_id: 'ops', input_text: workflow.description, data_mode: 'real', ticket_status: 'pending', created_at: summary.created_at, updated_at: summary.updated_at, latest_run: null, version: 1, ai_run_id: summary.latest_run_id, ai_status: 'failed', ai_result: null })
     if (path === `/api/v1/ai-runs/${summary.latest_run_id}`) return response({ id: summary.latest_run_id, ticket_id: summary.ticket_id, status: 'failed', stage: 'retrieve_diagnose', progress: 45, pipeline_version: 'v2', provider: 'openai-compatible', model: 'test-model', prompt_version: 'p2', result: null, evidence: [], confidence: null, error_code: 'LLM_TIMEOUT', error_message: '模型请求超时', duration_ms: 1000, decision: null, retry_count: 2, created_at: summary.created_at, updated_at: summary.updated_at })
     if (path.endsWith('/claim')) return response({ ...workflow, status: 'in_progress', assignee_id: users.operator.id, claimed_by: users.operator.username, version: 2 })
@@ -119,6 +120,8 @@ describe('P3 role-based application', () => {
     open(`/employee/tickets/${summary.ticket_id}`, 'employee')
     expect(await screen.findByText(summary.ticket_id)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: summary.summary })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '附件' })).toBeInTheDocument()
+    expect(screen.getByLabelText('选择附件')).toBeInTheDocument()
   })
 
   it('does not render internal comments for employees', async () => {

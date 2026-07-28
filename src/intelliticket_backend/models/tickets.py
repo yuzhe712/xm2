@@ -118,6 +118,60 @@ class TicketComment(TimestampMixin, Base):
     body: Mapped[str] = mapped_column(Text)
 
 
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    ticket_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tickets.ticket_id", ondelete="CASCADE"), index=True
+    )
+    uploader_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    original_name: Mapped[str] = mapped_column(String(255))
+    storage_key: Mapped[str] = mapped_column(String(80), unique=True)
+    content_type: Mapped[str] = mapped_column(String(120))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'sending', 'sent', 'failed', 'skipped')",
+            name="status_values",
+        ),
+        CheckConstraint("target IN ('operator', 'employee')", name="target_values"),
+        Index("ix_notification_deliveries_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    ticket_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tickets.ticket_id", ondelete="CASCADE"), index=True
+    )
+    channel: Mapped[str] = mapped_column(String(30), default="dingtalk", nullable=False)
+    target: Mapped[str] = mapped_column(String(20), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    celery_task_id: Mapped[str | None] = mapped_column(String(80))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    sent_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
 class AiRun(Base):
     __tablename__ = "ai_runs"
     __table_args__ = (
