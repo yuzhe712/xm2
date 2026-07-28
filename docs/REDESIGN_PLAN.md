@@ -1,6 +1,6 @@
 # IntelliTicket 产品与架构改造执行方案
 
-> 状态：P0 已完成，P1 待执行  
+> 状态：P0-P2 已完成，P3 待执行
 > 目标版本：v0.2.0  
 > 项目定位：单公司、单实例的 AI 增强型 IT 服务台  
 > 目标用户：企业员工、IT 运维人员、系统管理员  
@@ -510,14 +510,14 @@ tests/test_permissions.py
 
 任务：
 
-- [ ] 实现显式状态机服务 `TicketWorkflowService`。
-- [ ] 增加人工受理、原子认领、管理员转派接口。
-- [ ] 增加公开评论、内部备注和时间线查询。
-- [ ] 增加解决、提交人确认关闭、重新打开和取消接口。
-- [ ] 状态变化与事件日志同事务写入。
-- [ ] 增加乐观锁版本与 409 冲突错误。
-- [ ] 增加首次响应和解决 SLA 计算及超时查询。
-- [ ] 保留并适配根因、修复动作和验证字段。
+- [x] 实现显式状态机服务 `TicketWorkflowService`。
+- [x] 增加人工受理、原子认领、管理员转派接口。
+- [x] 增加公开评论、内部备注和时间线查询。
+- [x] 增加解决、提交人确认关闭、重新打开和取消接口。
+- [x] 状态变化与事件日志同事务写入。
+- [x] 增加乐观锁版本与 409 冲突错误。
+- [x] 增加首次响应和解决 SLA 计算及超时查询。
+- [x] 保留并适配根因、修复动作和验证字段。
 
 验收：
 
@@ -548,15 +548,15 @@ tests/test_ticket_end_to_end.py
 
 任务：
 
-- [ ] 增加 Redis、Celery Worker 和 AI 任务持久化。
-- [ ] 创建工单后提交 triage 任务，先落库后入队。
-- [ ] 将 7 Agent 收敛为 Triage、Retrieve+Diagnose、Quality Gate 三阶段。
-- [ ] 保留现有 Context、Diagnosis、Evidence、SOP 和案例检索中可复用逻辑。
-- [ ] 删除或停止调用仅为展示而存在的 Agent 串联。
-- [ ] 保存模型、Prompt 版本、证据、置信度、耗时、Token 和错误。
-- [ ] 实现有限重试、陈旧任务恢复和手动重跑。
-- [ ] WebSocket/SSE 改为订阅任务状态，不在 API 内启动 Thread。
-- [ ] 记录运维对 AI 建议的接受、修改和拒绝。
+- [x] 增加 Redis、Celery Worker 和 AI 任务持久化。
+- [x] 创建工单后提交 triage 任务，先落库后入队。
+- [x] 将 7 Agent 收敛为 Triage、Retrieve+Diagnose、Quality Gate 三阶段。
+- [x] 保留现有 Context、Diagnosis、Evidence、SOP 和案例检索中可复用逻辑。
+- [x] 删除或停止调用仅为展示而存在的 Agent 串联。
+- [x] 保存模型、Prompt 版本、证据、置信度、耗时、Token 和错误。
+- [x] 实现有限重试、陈旧任务恢复和手动重跑。
+- [x] WebSocket/SSE 改为订阅任务状态，不在 API 内启动 Thread。
+- [x] 记录运维对 AI 建议的接受、修改和拒绝。
 
 验收：
 

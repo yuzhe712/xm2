@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, inspect, select
 
 from intelliticket_backend.config import get_settings
 from intelliticket_backend.db import session_scope
-from intelliticket_backend.models import Ticket
+from intelliticket_backend.models import SlaPolicy, Ticket
 from intelliticket_backend.repositories.ticket_history import TicketHistoryRepository
 from scripts.migrate_legacy_sqlite import migrate
 
@@ -34,6 +34,22 @@ def test_initial_alembic_migration_creates_p0_tables(tmp_path, monkeypatch) -> N
 
     tables = set(inspect(create_engine(database_url)).get_table_names())
     assert P0_TABLES <= tables
+    ai_run_columns = {
+        column["name"]
+        for column in inspect(create_engine(database_url)).get_columns("ai_runs")
+    }
+    assert {
+        "celery_task_id",
+        "stage",
+        "progress",
+        "evidence_json",
+        "duration_ms",
+        "heartbeat_at",
+        "decision",
+    } <= ai_run_columns
+    with session_scope(database_url) as session:
+        policies = session.scalars(select(SlaPolicy).order_by(SlaPolicy.priority)).all()
+        assert [policy.priority for policy in policies] == ["P1", "P2", "P3", "P4"]
 
 
 def test_legacy_sqlite_migration_preserves_source_and_copies_ticket(

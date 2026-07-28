@@ -65,21 +65,24 @@ def test_employee_cannot_view_another_employees_ticket(permission_history) -> No
     assert all_tickets.status_code == 403
 
 
-def test_backend_data_mode_overrides_client_value(permission_history, monkeypatch) -> None:
+def test_backend_data_mode_overrides_client_value(monkeypatch) -> None:
     monkeypatch.setenv("DATA_MODE", "mock")
     get_settings.cache_clear()
     headers = _login("wangwu", "wangwu123456")
 
-    response = TestClient(app).post(
+    client = TestClient(app)
+    response = client.post(
         "/api/v1/tickets/submit",
         json={"text": "客户端尝试强制 real", "desk_id": "ops", "data_mode": "real"},
         headers=headers,
     )
 
     assert response.status_code == 200
-    detail = permission_history.get_ticket(response.json()["ticket_id"])
-    assert detail is not None
-    assert detail.data_mode == "mock"
+    detail = client.get(
+        f"/api/v1/tickets/{response.json()['ticket_id']}", headers=headers
+    )
+    assert detail.status_code == 200
+    assert detail.json()["data_mode"] == "mock"
 
 
 def test_websocket_rejects_anonymous_connection() -> None:

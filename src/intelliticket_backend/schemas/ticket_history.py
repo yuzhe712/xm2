@@ -10,7 +10,7 @@ from intelliticket_backend.services.agents.envelope import AgentTaskError, ReAct
 
 TICKET_ID_PATTERN = r"^TCK-\d{8}-[A-F0-9]{8}$"
 RUN_ID_PATTERN = r"^RUN-\d{8}-[A-F0-9]{8}$"
-RunStatus = Literal["completed", "failed", "cancelled", "pending"]
+RunStatus = Literal["queued", "running", "completed", "failed", "cancelled", "pending"]
 TicketStatus = Literal["pending", "open", "in_progress", "resolved", "closed", "cancelled"]
 SupportReplyDraftStatus = Literal["draft", "approved", "sent", "discarded"]
 
@@ -104,6 +104,11 @@ class TicketHistorySummary(BaseModel):
     affected_service: str | None = None
     priority: str | None = None
     report_title: str | None = None
+    version: int = 1
+    assignee_id: str | None = None
+    response_due_at: str | None = None
+    resolution_due_at: str | None = None
+    first_responded_at: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -167,5 +172,20 @@ class TicketHistoryDetailResponse(BaseModel):
     updated_at: str
     support_reply_draft: SupportReplyDraftResponse | None = None
     latest_run: StoredRunDetail | None = None
+    version: int = 1
+    submitter_id: str | None = None
+    assignee_id: str | None = None
+    assigned_team_id: str | None = None
+    claimed_by: str | None = None
+    claimed_at: str | None = None
+    priority: str | None = None
+    category: str | None = None
+    response_due_at: str | None = None
+    resolution_due_at: str | None = None
+    first_responded_at: str | None = None
+    resolved_at: str | None = None
+    ai_run_id: str | None = None
+    ai_status: str | None = None
+    ai_result: dict | None = None
 
     model_config = ConfigDict(extra="forbid")

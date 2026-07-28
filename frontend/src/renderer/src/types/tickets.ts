@@ -1,6 +1,6 @@
 export type DataMode = 'mock' | 'demo' | 'real'
 export type DeskId = 'ops' | 'support'
-export type RunStatus = 'completed' | 'failed' | 'cancelled' | 'pending'
+export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'pending'
 export type TicketStatus = 'pending' | 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled'
 export type SupportReplyDraftStatus = 'draft' | 'approved' | 'sent' | 'discarded'
 
@@ -400,6 +400,9 @@ export interface TicketHistoryDetailResponse {
   updated_at: string
   support_reply_draft?: SupportReplyDraftResponse | null
   latest_run: StoredRunDetail | null
+  ai_run_id?: string | null
+  ai_status?: string | null
+  ai_result?: Record<string, unknown> | null
 }
 
 export interface ApiErrorPayload {

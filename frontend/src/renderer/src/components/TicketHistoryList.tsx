@@ -2,6 +2,8 @@ import type { TicketHistorySummary, TicketStatus } from '../types/tickets'
 import { MockDataBadge } from './MockDataBadge'
 
 const STATUS_LABELS: Record<TicketHistorySummary['status'], string> = {
+  queued: 'AI 排队中',
+  running: 'AI 分析中',
   completed: '已完成',
   failed: '失败',
   cancelled: '已取消',

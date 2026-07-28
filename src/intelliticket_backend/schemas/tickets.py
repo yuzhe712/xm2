@@ -78,6 +78,8 @@ class TicketSubmitRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     data_mode: DataMode = DataMode.MOCK
     desk_id: DeskId = DeskId.OPS
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    priority: TicketPriority = TicketPriority.P3
 
     @field_validator("text")
     @classmethod
@@ -97,6 +99,11 @@ class TicketSubmitResponse(BaseModel):
     text: str
     desk_id: DeskId
     submitter: str
+    version: int = 1
+    response_due_at: str | None = None
+    resolution_due_at: str | None = None
+    ai_run_id: str | None = None
+    ai_status: str | None = None
 
 
 class TicketClassification(BaseModel):

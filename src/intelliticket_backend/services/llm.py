@@ -67,6 +67,9 @@ class DeepSeekChatClient(LlmClient):
         self.retry_backoff_seconds = retry_backoff_seconds
         self.temperature = temperature
         self.http_client = http_client or httpx.Client(timeout=timeout_seconds)
+        self.total_calls = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
 
     def structured_json_call(
         self,
@@ -105,6 +108,7 @@ class DeepSeekChatClient(LlmClient):
         attempts = self.max_retries + 1
         last_error: LlmClientError | None = None
         for attempt in range(1, attempts + 1):
+            self.total_calls += 1
             try:
                 response = self.http_client.post(
                     f"{self.base_url}/chat/completions",
@@ -205,6 +209,9 @@ class DeepSeekChatClient(LlmClient):
             ) from exc
 
         try:
+            usage = body.get("usage", {})
+            self.total_prompt_tokens += int(usage.get("prompt_tokens", 0) or 0)
+            self.total_completion_tokens += int(usage.get("completion_tokens", 0) or 0)
             return body["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LlmClientError(

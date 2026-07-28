@@ -11,7 +11,7 @@
 
 ## 项目简介
 
-IntelliTicket 是一个面向企业内部 IT 运维与支持场景的**多 Agent 协作式智能工单自动化处理平台**。系统接收自然语言描述的运维告警工单，通过确定性编排引擎驱动多个专项 Agent 协作，自动完成工单分类、优先级判定、运维上下文检索、根因诊断、处理建议生成与结构化报告输出，并提供完整的**证据溯源链**与**可审计执行轨迹**。
+IntelliTicket 是一个面向企业内部 IT 运维与支持场景的 AI 增强型服务台。系统先持久化工单，再由 Celery 执行 Triage、Retrieve+Diagnose、Quality Gate 三阶段分析；AI 只给出带证据的建议，认领、回复、解决和关闭仍由有权限的用户确认，并写入审计时间线。
 
 核心定位：**单公司单实例**，不引入 SaaS 多租户复杂性。所有运维上下文显式标记数据来源（`mock` / `real`），拒绝静默回退与幻觉结论。
 
@@ -56,65 +56,30 @@ IntelliTicket 是一个面向企业内部 IT 运维与支持场景的**多 Agent
 
 ---
 
-## 多 Agent 协作引擎
+## 异步 AI 管线
 
-### 编排模型
+### 三阶段模型
 
-采用 **Supervisor + 确定性路由** 架构。Supervisor 根据每个 Agent 的输出状态（证据质量、置信度、冲突与缺口）决定是否衔接到下一个 Agent、跳过某个阶段或终止处理。
+新建工单与 `ai_runs` 的 queued 记录在同一数据库主线中先提交，再投递到 Redis/Celery。Worker 可有限重试，陈旧任务可恢复，浏览器只订阅持久化状态。
 
 ```
-用户输入工单
-    │
-    ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│ Intake Agent │───▶│ 工单分类 · 优先级判定 · 症状/指标提取   │
-└──────┬───────┘    └─────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│Context Agent │───▶│ 部署记录 · 指标快照 · 历史工单 · SOP   │
-└──────┬───────┘    └─────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│Diagnosis     │───▶│ 根因候选 · 证据链 · 置信度 · 不确定性  │
-│Agent         │    └─────────────────────────────────────────┘
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│Routing Agent │───▶│ 处理团队 · 行动项 · SOP 引用 · 升级策略│
-└──────┬───────┘    └─────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────┐
-│Support Reply │───▶ 面向提交者的自然语言回复草稿
-│Agent         │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│Reviewer      │───▶│ 质量审查 · 证据闭合检查 · 降级标记    │
-│Agent         │    └─────────────────────────────────────────┘
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐    ┌─────────────────────────────────────────┐
-│Report Agent  │───▶│ 最终报告 · 执行轨迹 · 证据汇总        │
-└──────────────┘    └─────────────────────────────────────────┘
+提交工单并提交事务
+  -> queued ai_run
+  -> Triage：分类、优先级、服务识别
+  -> Retrieve+Diagnose：上下文、SOP、案例和诊断建议
+  -> Quality Gate：证据闭合、置信度、建议回复和人工复核标记
+  -> completed / failed（不把业务工单标记为 failed）
 ```
 
-### Agent 职责矩阵
+### 阶段职责
 
-| Agent | 核心职责 | 输入 | 输出 |
+| 阶段 | 核心职责 | 输入 | 输出 |
 |-------|---------|------|------|
-| **Intake** | 自然语言理解、分类、定级 | 原始工单文本 | `TicketClassification` |
-| **Context** | 运维上下文检索 | 分类结果 + 服务名 | `RetrievedContext` + 证据列表 |
-| **Diagnosis** | 根因分析与证据推理 | 上下文 + 历史工单 | `DiagnosisResult` + 候选根因 |
-| **Routing** | 处理分派与升级建议 | 诊断 + SOP | `RoutingRecommendation` |
-| **Support Reply** | 面向提交者的回复草稿 | 全链路结果 | 自然语言回复 |
-| **Reviewer** | 质量审查与证据闭合 | 全链路结果 | `ReviewResult` + 改进建议 |
-| **Report** | 最终报告汇总 | 全链路结果 | `FinalReport` |
+| **Triage** | 自然语言理解、分类、定级 | 原始工单文本 | `TicketClassification` |
+| **Retrieve+Diagnose** | 上下文检索与证据推理 | 分类结果 + 服务名 | 上下文、证据和候选根因 |
+| **Quality Gate** | 证据闭合与人工复核标记 | 诊断结果 | 处理建议、回复草稿、置信度 |
+
+旧 `/api/v1/tickets/process` 同步链路保留为 deprecated 兼容接口，不用于新建工单主流程。
 
 ---
 
@@ -240,6 +205,9 @@ python -m venv .venv
 
 # 启动服务
 .\.venv\Scripts\python -m uvicorn intelliticket_backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# 另一个终端启动 Worker（Windows 使用 solo pool）
+.\.venv\Scripts\python -m celery -A intelliticket_backend.worker:celery_app worker --pool=solo --loglevel=INFO
 ```
 
 验证：
@@ -287,21 +255,24 @@ $body = @{
   text = "线上支付服务出现超时告警，订单量从正常1000/min降到300/min"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/tickets/process `
+$ticket = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/tickets/submit `
   -Headers $headers -ContentType "application/json" -Body $body
+
+Invoke-RestMethod -Headers $headers `
+  "http://127.0.0.1:8000/api/v1/ai-runs/$($ticket.ai_run_id)"
 ```
 
 `data_mode` 由后端部署配置统一决定，客户端提交的同名字段不会改变运行模式。
 
-响应用于返回并持久化：`ticket_id`、`run_id`、分类、优先级、影响服务、上下文、根因候选、处理建议、workflow trace、Supervisor 路由决策、最终报告及全部证据条目。
+提交响应包含 `ticket_id` 和 `ai_run_id`。AI 运行记录持久化阶段、进度、模型、Prompt 版本、证据、置信度、耗时、Token、错误与人工决策。
 
-### WebSocket 实时进度
+### WebSocket 状态订阅
 
 ```
-WS /api/v1/tickets/process/ws?access_token=<登录 token>
+WS /api/v1/ai-runs/<run_id>/ws?access_token=<登录 token>
 ```
 
-事件流：`started → agent_progress × N → completed / failed / cancelled`
+事件返回数据库中的 `queued / running / completed / failed / cancelled` 状态。连接中断不会取消 Worker 任务。
 
 ### 历史查询
 
@@ -379,8 +350,8 @@ Invoke-RestMethod -Headers $headers `
 | 阶段 | 内容 |
 |------|------|
 | **P0（已完成）** | 数据库用户、角色权限、Alembic 迁移、部署密钥与服务端数据模式 |
-| **P1（待执行）** | 人工受理、原子认领、分派、评论、解决与确认关闭闭环 |
-| **P2（待执行）** | Redis/Celery AI 任务持久化与三阶段诊断流水线 |
+| **P1（已完成）** | 人工受理、原子认领、分派、评论、解决与确认关闭闭环 |
+| **P2（已完成）** | Redis/Celery AI 任务持久化、恢复、状态订阅与三阶段诊断流水线 |
 | **P3（待执行）** | 员工、运维、管理员角色化 Web 工作区 |
 | **P4（待执行）** | 附件、异步通知、Compose、健康检查与监控 |
 | **P5（待执行）** | 完整集成、故障、部署和真实压测验证 |

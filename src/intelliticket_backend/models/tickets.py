@@ -132,21 +132,40 @@ class AiRun(Base):
         String(64), ForeignKey("tickets.ticket_id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    celery_task_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    stage: Mapped[str] = mapped_column(String(40), default="queued", nullable=False)
+    progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     pipeline_version: Mapped[str] = mapped_column(String(40))
     provider: Mapped[str] = mapped_column(String(60))
     model: Mapped[str] = mapped_column(String(120))
     prompt_version: Mapped[str] = mapped_column(String(40))
     input_hash: Mapped[str] = mapped_column(String(64), index=True)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    evidence_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON)
+    confidence: Mapped[float | None]
     error_code: Mapped[str | None] = mapped_column(String(120))
     error_message: Mapped[str | None] = mapped_column(Text)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer)
     completion_tokens: Mapped[int | None] = mapped_column(Integer)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    duration_ms: Mapped[int | None]
+    decision: Mapped[str | None] = mapped_column(String(20))
+    decision_note: Mapped[str | None] = mapped_column(Text)
+    modified_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    decided_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    decided_at: Mapped[datetime | None]
     started_at: Mapped[datetime | None]
     completed_at: Mapped[datetime | None]
+    heartbeat_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
     )
 
 

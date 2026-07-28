@@ -402,7 +402,7 @@ def test_reprocess_unknown_ticket_returns_404(history_db, operator_auth) -> None
     assert response.json()["error"]["code"] == "TICKET_NOT_FOUND"
 
 
-def test_patch_ticket_lifecycle_updates_business_status_without_new_run(
+def test_generic_patch_cannot_change_business_status(
     history_db, operator_auth
 ) -> None:
     client = TestClient(app)
@@ -412,8 +412,6 @@ def test_patch_ticket_lifecycle_updates_business_status_without_new_run(
         headers=operator_auth,
     )
     ticket_id = process_response.json()["ticket_id"]
-    original_run_id = process_response.json()["run_id"]
-
     response = client.patch(
         f"/api/v1/tickets/{ticket_id}",
         json={
@@ -423,13 +421,8 @@ def test_patch_ticket_lifecycle_updates_business_status_without_new_run(
         headers=operator_auth,
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ticket_status"] == "closed"
-    assert payload["closed_at"]
-    assert payload["resolution_summary"] == "已按 AI 建议完成处理。"
-    assert payload["latest_run"]["run_id"] == original_run_id
-    assert payload["latest_run"]["status"] == "completed"
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "TICKET_COMMAND_REQUIRED"
 
 
 def test_patch_unknown_ticket_returns_404(history_db, operator_auth) -> None:

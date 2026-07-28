@@ -32,10 +32,14 @@ def make_client(
     )
 
 
-def deepseek_response(content: object, status_code: int = 200) -> httpx.Response:
+def deepseek_response(
+    content: object,
+    status_code: int = 200,
+    usage: dict[str, int] | None = None,
+) -> httpx.Response:
     return httpx.Response(
         status_code,
-        json={"choices": [{"message": {"content": content}}]},
+        json={"choices": [{"message": {"content": content}}], "usage": usage or {}},
     )
 
 
@@ -153,3 +157,25 @@ def test_valid_json_validates_schema() -> None:
     )
 
     assert result.next_agent == "ticket_intake_agent"
+
+
+def test_token_usage_and_external_calls_are_accumulated() -> None:
+    client = make_client(
+        httpx.MockTransport(
+            lambda _request: deepseek_response(
+                json.dumps({"value": "ok"}),
+                usage={"prompt_tokens": 12, "completion_tokens": 4},
+            )
+        )
+    )
+
+    result = client.structured_json_call(
+        system_prompt="Return JSON.",
+        user_payload={},
+        response_schema=SimpleSchema,
+    )
+
+    assert result.value == "ok"
+    assert client.total_calls == 1
+    assert client.total_prompt_tokens == 12
+    assert client.total_completion_tokens == 4

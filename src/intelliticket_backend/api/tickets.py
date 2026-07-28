@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-import asyncio
-from queue import Queue
-from threading import Event, Thread
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, WebSocket, WebSocketDisconnect, status
-from pydantic import ValidationError
+from fastapi import APIRouter, Depends, Path, Query, WebSocket, status
+from sqlalchemy.orm import Session
 
 from intelliticket_backend.config import get_settings
+from intelliticket_backend.db import get_db
 from intelliticket_backend.errors import AppError
+from intelliticket_backend.models import Ticket
+from intelliticket_backend.repositories.ai_runs import AiRunRepository
 from intelliticket_backend.repositories.ticket_history import TicketHistoryRepository
+from intelliticket_backend.repositories.tickets import TicketRepository
 from intelliticket_backend.schemas.ticket_history import (
     TICKET_ID_PATTERN,
     SupportReplyDraftUpdateRequest,
     TicketHistoryDetailResponse,
     TicketHistoryListResponse,
+    TicketHistorySummary,
     TicketLifecycleUpdateRequest,
 )
 from intelliticket_backend.schemas.tickets import (
@@ -23,11 +25,6 @@ from intelliticket_backend.schemas.tickets import (
     DeskId,
     TicketProcessRequest,
     TicketProcessResponse,
-    TicketProcessWsCancelledEvent,
-    TicketProcessWsCompletedEvent,
-    TicketProcessWsErrorEvent,
-    TicketProcessWsStartedEvent,
-    TicketProcessWsStartMessage,
     TicketSubmitRequest,
     TicketSubmitResponse,
 )
@@ -42,6 +39,8 @@ from intelliticket_backend.services.notifications import (
 )
 from intelliticket_backend.services.permissions import ensure_ticket_visible
 from intelliticket_backend.services.ticket_processing import TicketProcessingService
+from intelliticket_backend.services.ticket_workflow import TicketWorkflowService
+from intelliticket_backend.services.worker_tasks import dispatch_ai_run
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -93,58 +92,148 @@ def _configured_data_mode() -> DataMode:
     return DataMode(get_settings().data_mode)
 
 
+def _merged_listing(
+    sql_items: list,
+    legacy_items: list,
+    *,
+    limit: int,
+    offset: int,
+) -> TicketHistoryListResponse:
+    by_id = {item.ticket_id: item for item in legacy_items}
+    by_id.update({item.ticket_id: item for item in sql_items})
+    items = sorted(
+        by_id.values(),
+        key=lambda item: (item.updated_at, item.ticket_id),
+        reverse=True,
+    )
+    return TicketHistoryListResponse(
+        items=items[offset : offset + limit],
+        limit=limit,
+        offset=offset,
+        total=len(items),
+    )
+
+
+def _sql_history_summary(session: Session, ticket: Ticket) -> TicketHistorySummary:
+    ai_run = (
+        AiRunRepository(session).get(ticket.latest_run_id)
+        if ticket.latest_run_id
+        else None
+    )
+    return TicketRepository.to_history_summary(
+        ticket,
+        ai_status=ai_run.status if ai_run else "pending",
+    )
+
+
 @router.get("", response_model=TicketHistoryListResponse)
 def list_tickets(
     _user: CurrentUser = Depends(require_operator),  # noqa: B008
+    session: Session = Depends(get_db),  # noqa: B008
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
     desk_id: Annotated[DeskId | None, Query()] = None,
 ) -> TicketHistoryListResponse:
     """查询已持久化的工单历史。"""
-    return _history_repository().list_tickets(limit=limit, offset=offset, desk_id=desk_id)
+    sql_items = [
+        _sql_history_summary(session, ticket)
+        for ticket in TicketRepository(session).list_models(
+            desk_id=desk_id.value if desk_id else None
+        )
+    ]
+    legacy_repository = _history_repository()
+    legacy_count = legacy_repository.list_tickets(
+        limit=1, offset=0, desk_id=desk_id
+    ).total
+    legacy_items = legacy_repository.list_tickets(
+        limit=max(legacy_count, 1), offset=0, desk_id=desk_id
+    ).items
+    return _merged_listing(sql_items, legacy_items, limit=limit, offset=offset)
 
 
 @router.post("/submit", response_model=TicketSubmitResponse)
 def submit_ticket(
     request: TicketSubmitRequest,
     user: CurrentUser = Depends(require_auth),  # noqa: B008
+    session: Session = Depends(get_db),  # noqa: B008
 ) -> TicketSubmitResponse:
     """员工提交工单（只创建，不处理）。提交后通知运维群。"""
-    service = TicketProcessingService()
-    ticket_id = service._make_id("TCK")
-    result = service.history_repository.save_pending_ticket(
-        ticket_id=ticket_id,
-        text=request.text,
+    title = request.title or request.text.splitlines()[0][:120]
+    result = TicketWorkflowService(session).submit(
+        title=title,
+        description=request.text,
         data_mode=_configured_data_mode().value,
         desk_id=request.desk_id.value,
-        submitter=user.user_id,
-        submitter_id=user.id,
+        submitter=user,
+        priority=request.priority.value,
     )
-    _notify_operator_new_ticket(ticket_id=ticket_id, submitter=user.user_id, text=request.text)
-    return TicketSubmitResponse.model_validate(result)
+    ticket = TicketRepository(session).get(result.ticket_id)
+    assert ticket is not None
+    ai_run = AiRunRepository(session).create(ticket, get_settings(), user.id)
+    session.commit()
+    task_id = dispatch_ai_run(ai_run.id)
+    _notify_operator_new_ticket(
+        ticket_id=result.ticket_id, submitter=user.user_id, text=request.text
+    )
+    return TicketSubmitResponse(
+        ticket_id=result.ticket_id,
+        status=result.status,
+        created_at=result.created_at,
+        text=result.description,
+        desk_id=result.desk_id,
+        submitter=result.submitter,
+        version=result.version,
+        response_due_at=result.response_due_at,
+        resolution_due_at=result.resolution_due_at,
+        ai_run_id=ai_run.id,
+        ai_status="queued" if task_id is not None else "failed",
+    )
 
 
 @router.get("/mine", response_model=TicketHistoryListResponse)
 def list_my_tickets(
     user: CurrentUser = Depends(require_auth),  # noqa: B008
+    session: Session = Depends(get_db),  # noqa: B008
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     desk_id: Annotated[DeskId | None, Query()] = None,
 ) -> TicketHistoryListResponse:
     """当前登录用户查看自己提交的工单。"""
-    return _history_repository().list_by_submitter(
-        user.user_id, limit=limit, offset=offset, desk_id=desk_id,
-    )
+    sql_items = [
+        _sql_history_summary(session, ticket)
+        for ticket in TicketRepository(session).list_models(
+            desk_id=desk_id.value if desk_id else None,
+            submitter_id=user.id,
+        )
+    ]
+    legacy_repository = _history_repository()
+    legacy_count = legacy_repository.list_by_submitter(
+        user.user_id, limit=1, offset=0, desk_id=desk_id
+    ).total
+    legacy_items = legacy_repository.list_by_submitter(
+        user.user_id, limit=max(legacy_count, 1), offset=0, desk_id=desk_id
+    ).items
+    return _merged_listing(sql_items, legacy_items, limit=limit, offset=offset)
 
 
 @router.get("/queue", response_model=TicketHistoryListResponse)
 def list_pending_queue(
     _user: CurrentUser = Depends(require_operator),  # noqa: B008
+    session: Session = Depends(get_db),  # noqa: B008
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TicketHistoryListResponse:
     """运维查看待处理工单队列（需 operator 角色）。"""
-    return _history_repository().list_pending(limit=limit, offset=offset)
+    sql_items = [
+        _sql_history_summary(session, ticket)
+        for ticket in TicketRepository(session).list_models(statuses={"pending", "open"})
+    ]
+    legacy_repository = _history_repository()
+    legacy_count = legacy_repository.list_pending(limit=1, offset=0).total
+    legacy_items = legacy_repository.list_pending(
+        limit=max(legacy_count, 1), offset=0
+    ).items
+    return _merged_listing(sql_items, legacy_items, limit=limit, offset=offset)
 
 
 @router.patch("/{ticket_id}/support-reply-draft", response_model=TicketHistoryDetailResponse)
@@ -231,8 +320,22 @@ def update_ticket_lifecycle(
     request: TicketLifecycleUpdateRequest,
     user: CurrentUser = Depends(require_operator),  # noqa: B008
 ) -> TicketHistoryDetailResponse:
-    """更新工单业务生命周期。状态变为 resolved 时通知提交人。"""
+    """兼容旧 AI 记录的非状态字段；状态只能通过独立工作流命令变更。"""
     repository = _history_repository()
+    if repository.get_ticket(ticket_id) is None:
+        raise AppError(
+            "TICKET_NOT_FOUND",
+            "未找到已持久化的工单",
+            status.HTTP_404_NOT_FOUND,
+            {"ticket_id": ticket_id},
+        )
+    if request.ticket_status is not None:
+        raise AppError(
+            "TICKET_COMMAND_REQUIRED",
+            "请使用认领、解决、确认、重开或取消命令变更工单状态",
+            status.HTTP_409_CONFLICT,
+            {"requested_status": request.ticket_status},
+        )
     result = repository.update_ticket_lifecycle(ticket_id, request)
     if result is None:
         raise AppError(
@@ -240,12 +343,6 @@ def update_ticket_lifecycle(
             "未找到已持久化的工单",
             status.HTTP_404_NOT_FOUND,
             {"ticket_id": ticket_id},
-        )
-    if request.ticket_status == "resolved" and result.submitter:
-        _notify_employee_resolved(
-            ticket_id=ticket_id,
-            submitter=result.submitter,
-            resolution=result.resolution_summary or "已处理完成",
         )
     return result
 
@@ -338,8 +435,18 @@ def confirm_root_cause(
 def get_ticket(
     ticket_id: Annotated[str, Path(pattern=TICKET_ID_PATTERN)],
     user: CurrentUser = Depends(require_auth),  # noqa: B008
+    session: Session = Depends(get_db),  # noqa: B008
 ) -> TicketHistoryDetailResponse:
     """按 ticket_id 查询已持久化的工单详情。"""
+    sql_ticket = TicketRepository(session).get(ticket_id)
+    if sql_ticket is not None:
+        ensure_ticket_visible(user, sql_ticket.submitter)
+        ai_run = (
+            AiRunRepository(session).get(sql_ticket.latest_run_id)
+            if sql_ticket.latest_run_id
+            else None
+        )
+        return TicketRepository.to_history_detail(sql_ticket, ai_run)
     result = _history_repository().get_ticket(ticket_id)
     if result is None:
         raise AppError(
@@ -365,7 +472,7 @@ def process_ticket(
 
 @router.websocket("/process/ws")
 async def process_ticket_ws(websocket: WebSocket) -> None:
-    """通过 WebSocket 处理工单并推送 Agent 进度事件。"""
+    """Deprecated start-and-process socket; use the persistent ai-run subscription."""
     token = websocket.query_params.get("access_token", "")
     user = current_user_from_token(token)
     if user is None:
@@ -375,146 +482,14 @@ async def process_ticket_ws(websocket: WebSocket) -> None:
         await websocket.close(code=4403, reason="operator role required")
         return
     await websocket.accept()
-    sequence = 0
-    ticket_id = TicketProcessingService()._make_id("TCK")
-    run_id = TicketProcessingService()._make_id("RUN")
-    cancel_event = Event()
-
-    try:
-        raw_start = await websocket.receive_json()
-        start = TicketProcessWsStartMessage.model_validate(raw_start)
-    except (ValidationError, ValueError) as exc:
-        sequence += 1
-        await websocket.send_json(
-            TicketProcessWsErrorEvent(
-                ticket_id=ticket_id,
-                run_id=run_id,
-                sequence=sequence,
-                error={
-                    "code": "WS_INVALID_START_MESSAGE",
-                    "message": "WebSocket start 消息无效",
-                    "details": {"error": str(exc)},
-                },
-            ).model_dump(mode="json")
-        )
-        await websocket.close(code=1003)
-        return
-
-    sequence += 1
     await websocket.send_json(
-        TicketProcessWsStartedEvent(
-            ticket_id=ticket_id,
-            run_id=run_id,
-            sequence=sequence,
-        ).model_dump(mode="json")
+        {
+            "type": "error",
+            "error": {
+                "code": "WS_PROCESSING_DEPRECATED",
+                "message": "请先创建工单，再订阅 /api/v1/ai-runs/{run_id}/ws",
+                "details": {},
+            },
+        }
     )
-
-    queue: Queue[dict] = Queue(maxsize=16)
-
-    def progress_sink(event: object) -> None:
-        try:
-            queue.put_nowait(event.model_dump(mode="json"))
-        except Exception as exc:  # pragma: no cover - defensive bridge guard
-            cancel_event.set()
-            raise AppError(
-                "STREAM_BACKPRESSURE",
-                "WebSocket 进度事件队列已满",
-                500,
-                {"error": str(exc)},
-            ) from exc
-
-    def run_processing() -> None:
-        try:
-            result = TicketProcessingService().process_ticket(
-                TicketProcessRequest(
-                    text=start.request.text,
-                    data_mode=_configured_data_mode(),
-                    desk_id=start.request.desk_id,
-                    operator_id=user.user_id,
-                ),
-                progress_sink=progress_sink,
-                cancel_event=cancel_event,
-                ticket_id=ticket_id,
-                run_id=run_id,
-            )
-            queue.put_nowait({"type": "__completed__", "result": result.model_dump(mode="json")})
-        except AppError as exc:
-            queue.put_nowait(
-                {
-                    "type": "__error__",
-                    "error": {"code": exc.code, "message": exc.message, "details": exc.details},
-                }
-            )
-        except Exception as exc:  # pragma: no cover - global safety net
-            queue.put_nowait(
-                {
-                    "type": "__error__",
-                    "error": {
-                        "code": "WS_PROCESSING_ERROR",
-                        "message": "WebSocket 工单处理失败",
-                        "details": {"error": str(exc)},
-                    },
-                }
-            )
-
-    worker = Thread(target=run_processing, daemon=True)
-    worker.start()
-
-    try:
-        while True:
-            try:
-                client_message = await asyncio.wait_for(websocket.receive_json(), timeout=0.01)
-                if client_message.get("type") == "cancel":
-                    cancel_event.set()
-            except TimeoutError:
-                pass
-            except WebSocketDisconnect:
-                cancel_event.set()
-                return
-
-            try:
-                item = queue.get_nowait()
-            except Exception:
-                await asyncio.sleep(0.01)
-                continue
-
-            if item.get("type") == "__completed__":
-                sequence += 1
-                await websocket.send_json(
-                    TicketProcessWsCompletedEvent(
-                        ticket_id=ticket_id,
-                        run_id=run_id,
-                        sequence=sequence,
-                        result=TicketProcessResponse.model_validate(item["result"]),
-                    ).model_dump(mode="json")
-                )
-                await websocket.close(code=1000)
-                return
-
-            if item.get("type") == "__error__":
-                if item["error"]["code"] == "PROCESSING_CANCELLED":
-                    sequence += 1
-                    await websocket.send_json(
-                        TicketProcessWsCancelledEvent(
-                            ticket_id=ticket_id,
-                            run_id=run_id,
-                            sequence=sequence,
-                        ).model_dump(mode="json")
-                    )
-                    await websocket.close(code=1000)
-                    return
-                sequence += 1
-                await websocket.send_json(
-                    TicketProcessWsErrorEvent(
-                        ticket_id=ticket_id,
-                        run_id=run_id,
-                        sequence=sequence,
-                        error=item["error"],
-                    ).model_dump(mode="json")
-                )
-                await websocket.close(code=1011)
-                return
-
-            await websocket.send_json(item)
-    finally:
-        cancel_event.set()
+    await websocket.close(code=1008, reason="persistent ai-run subscription required")

@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     llm_temperature: float | None = Field(default=0.0, ge=0.0, le=2.0)
     orchestrator_max_steps: int = Field(default=8, ge=1)
     orchestrator_route_mode: str = "deterministic"
+    celery_broker_url: SecretStr = SecretStr("redis://localhost:6379/0")
+    celery_result_backend: SecretStr = SecretStr("redis://localhost:6379/1")
+    celery_task_always_eager: bool = False
+    ai_task_max_retries: int = Field(default=3, ge=0, le=10)
+    ai_task_retry_backoff_seconds: int = Field(default=5, ge=0, le=3600)
+    ai_task_stale_seconds: int = Field(default=900, ge=30)
+    ai_pipeline_version: str = "p2-v1"
+    ai_prompt_version: str = "p2-v1"
     support_workflow_strategy: str = "deterministic"
     intake_agent_strategy: str = "deterministic"
     diagnosis_agent_strategy: str = "deterministic"
@@ -92,6 +100,10 @@ class Settings(BaseSettings):
                 ("postgresql://", "postgresql+psycopg://")
             ):
                 raise ValueError("production requires a PostgreSQL DATABASE_URL")
+            if not self.celery_broker_url.get_secret_value().startswith("redis://"):
+                raise ValueError("production requires a Redis CELERY_BROKER_URL")
+            if not self.celery_result_backend.get_secret_value().startswith("redis://"):
+                raise ValueError("production requires a Redis CELERY_RESULT_BACKEND")
             if password.lower() in UNSAFE_BOOTSTRAP_PASSWORDS:
                 raise ValueError("production refuses an unsafe bootstrap administrator password")
         return self

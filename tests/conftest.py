@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from sqlalchemy import delete
 
 
 def pytest_configure() -> None:
@@ -16,6 +17,8 @@ def pytest_configure() -> None:
     os.environ["APP_ENV"] = "test"
     os.environ["DATABASE_URL"] = f"sqlite+pysqlite:///{auth_db.as_posix()}"
     os.environ["JWT_SECRET_KEY"] = "test-only-jwt-secret-with-at-least-32-characters"
+    os.environ["CELERY_BROKER_URL"] = "memory://"
+    os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -61,3 +64,18 @@ def operator_auth(auth_database) -> dict[str, str]:
     )
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['token']}"}
+
+
+@pytest.fixture(autouse=True)
+def relational_ticket_isolation(auth_database):
+    """Keep SQLAlchemy workflow rows isolated while retaining session-scoped users."""
+    yield
+
+    from intelliticket_backend.db import session_scope
+    from intelliticket_backend.models import AiRun, Ticket, TicketComment, TicketEvent
+
+    with session_scope() as session:
+        session.execute(delete(TicketEvent))
+        session.execute(delete(TicketComment))
+        session.execute(delete(AiRun))
+        session.execute(delete(Ticket))

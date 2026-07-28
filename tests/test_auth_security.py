@@ -80,8 +80,22 @@ def test_production_rejects_unsafe_bootstrap_password() -> None:
             app_env="production",
             database_url="postgresql+psycopg://app:secret@db/intelliticket",
             jwt_secret_key="production-jwt-secret-that-is-long-and-random-enough",
+            celery_broker_url="redis://redis:6379/0",
+            celery_result_backend="redis://redis:6379/1",
             bootstrap_admin_username="admin",
             bootstrap_admin_password="admin",
+        )
+
+
+def test_production_rejects_non_redis_task_broker() -> None:
+    with pytest.raises(ValidationError, match="Redis CELERY_BROKER_URL"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            database_url="postgresql+psycopg://app:secret@db/intelliticket",
+            jwt_secret_key="production-jwt-secret-that-is-long-and-random-enough",
+            celery_broker_url="memory://",
+            celery_result_backend="redis://redis:6379/1",
         )
 
 
