@@ -1,0 +1,13 @@
+import { FormEvent, useEffect, useState } from 'react'
+import { useAuth } from '../../app/AuthProvider'
+import { createTeam, listTeams, updateTeam } from '../../api/admin'
+import type { Team } from '../../types/workflow'
+
+export function AdminTeamsPage(): JSX.Element {
+  const auth = useAuth(); const [teams, setTeams] = useState<Team[]>([]); const [form, setForm] = useState({ code: '', name: '' }); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false)
+  const load = async () => { if (auth.token) try { setTeams(await listTeams(auth.token)) } catch (caught) { setError(caught instanceof Error ? caught.message : '加载失败') } }
+  useEffect(() => { void load() }, [auth.token])
+  const submit = async (event: FormEvent) => { event.preventDefault(); if (!auth.token) return; setBusy(true); try { await createTeam(form, auth.token); setForm({ code: '', name: '' }); await load() } catch (caught) { setError(caught instanceof Error ? caught.message : '创建失败') } finally { setBusy(false) } }
+  const toggle = async (team: Team) => { if (!auth.token) return; setBusy(true); try { await updateTeam(team.id, { is_active: !team.is_active }, auth.token); await load() } catch (caught) { setError(caught instanceof Error ? caught.message : '更新失败') } finally { setBusy(false) } }
+  return <div className="page-stack"><header className="page-header"><div><span className="eyebrow">管理控制台</span><h1>团队</h1><p>维护可用于分派工单的处理团队。</p></div><div className="page-stat"><strong>{teams.length}</strong><span>团队</span></div></header>{error && <div className="error-banner">{error}</div>}<form className="surface inline-create-form" onSubmit={submit}><h2>创建团队</h2><div className="form-grid compact-create-grid"><label><span>团队编码</span><input aria-label="团队编码" pattern="[A-Za-z0-9_-]+" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></label><label><span>团队名称</span><input aria-label="团队名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><button disabled={busy || !form.code || !form.name}>创建</button></div></form><section className="data-table"><div className="data-row team-row data-head"><span>编码</span><span>名称</span><span>状态</span><span>操作</span></div>{teams.map((team) => <div className="data-row team-row" key={team.id}><span><strong>{team.code}</strong></span><span>{team.name}</span><span><span className={team.is_active ? 'state-active' : 'state-inactive'}>{team.is_active ? '启用' : '停用'}</span></span><span><button className="button-quiet" disabled={busy} onClick={() => void toggle(team)}>{team.is_active ? '停用' : '启用'}</button></span></div>)}</section></div>
+}

@@ -178,3 +178,22 @@ class SlaPolicy(TimestampMixin, Base):
     response_minutes: Mapped[int] = mapped_column(Integer)
     resolution_minutes: Mapped[int] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class ServiceCatalogItem(TimestampMixin, Base):
+    __tablename__ = "service_catalog"
+    __table_args__ = (
+        CheckConstraint("desk_id IN ('ops', 'support')", name="desk_id_values"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    service_key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    desk_id: Mapped[str] = mapped_column(String(20), default="ops", nullable=False)
+    team_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="SET NULL")
+    )
+    keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    default_category: Mapped[str | None] = mapped_column(String(80))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

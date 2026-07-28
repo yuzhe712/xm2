@@ -17,8 +17,10 @@ export interface LoginResponse {
 }
 
 export interface TicketSubmitRequest {
+  title?: string
   text: string
   desk_id: DeskId
+  priority?: string
 }
 
 export interface TicketSubmitResponse {
@@ -30,6 +32,11 @@ export interface TicketSubmitResponse {
   submitter: string
   assessed_priority?: string | null
   assessed_priority_reason?: string | null
+  version?: number
+  response_due_at?: string | null
+  resolution_due_at?: string | null
+  ai_run_id?: string | null
+  ai_status?: string | null
 }
 
 export interface TicketHistorySummary {
@@ -54,6 +61,11 @@ export interface TicketHistorySummary {
   affected_service?: string | null
   priority?: string | null
   report_title?: string | null
+  version?: number
+  assignee_id?: string | null
+  response_due_at?: string | null
+  resolution_due_at?: string | null
+  first_responded_at?: string | null
 }
 
 export interface CatalogItem {
@@ -403,6 +415,18 @@ export interface TicketHistoryDetailResponse {
   ai_run_id?: string | null
   ai_status?: string | null
   ai_result?: Record<string, unknown> | null
+  version?: number
+  submitter_id?: string | null
+  assignee_id?: string | null
+  assigned_team_id?: string | null
+  claimed_by?: string | null
+  claimed_at?: string | null
+  priority?: string | null
+  category?: string | null
+  response_due_at?: string | null
+  resolution_due_at?: string | null
+  first_responded_at?: string | null
+  resolved_at?: string | null
 }
 
 export interface ApiErrorPayload {

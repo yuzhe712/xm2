@@ -1,8 +1,18 @@
 import { authLoginUrl } from '../config/backend'
 import type { LoginRequest, LoginResponse } from '../types/tickets'
+import type { SessionUser } from '../types/workflow'
+import { apiRequest } from './client'
 
 export interface ApiErrorPayload {
   error: { code: string; message: string; details: Record<string, unknown> }
+}
+
+export function getCurrentUser(
+  token: string,
+  fetcher: typeof fetch = fetch,
+  baseUrl?: string,
+): Promise<SessionUser> {
+  return apiRequest<SessionUser>('/api/v1/users/me', {}, token, fetcher, baseUrl)
 }
 
 export class ApiError extends Error {

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from intelliticket_backend.api.ai_runs import router as ai_runs_router
+from intelliticket_backend.api.admin_config import router as admin_config_router
 from intelliticket_backend.api.auth import router as auth_router
 from intelliticket_backend.api.desks import router as desks_router
 from intelliticket_backend.api.health import router as health_router
@@ -38,6 +39,7 @@ register_exception_handlers(app)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(admin_config_router)
 app.include_router(ai_runs_router)
 app.include_router(ticket_workflow_router)
 app.include_router(tickets_router)
