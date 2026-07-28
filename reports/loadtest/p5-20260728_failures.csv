@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+P5,concurrent claim invariant,"RuntimeError('claim invariant failed: [200, 503]')",10,2026-07-28T11:01:13Z,2026-07-28T11:01:27Z
+P5,concurrent claim invariant,"RuntimeError('claim invariant failed: [503, 503]')",11,2026-07-28T11:01:13Z,2026-07-28T11:01:27Z
+POST,POST /api/v1/tickets/submit,CatchResponseError('ticket creation failed with 503'),54,2026-07-28T11:01:11Z,2026-07-28T11:01:28Z
+GET,GET /api/v1/tickets/queue,HTTPError('503 Server Error: Service Temporarily Unavailable for url: GET /api/v1/tickets/queue'),25,2026-07-28T11:01:11Z,2026-07-28T11:01:28Z
+GET,GET /api/v1/tickets/[id]/workflow,HTTPError('503 Server Error: Service Temporarily Unavailable for url: GET /api/v1/tickets/[id]/workflow'),25,2026-07-28T11:01:11Z,2026-07-28T11:01:27Z
+POST,POST /api/v1/tickets/[id]/claim,CatchResponseError('unexpected claim response 503'),32,2026-07-28T11:01:13Z,2026-07-28T11:01:27Z

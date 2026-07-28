@@ -1,7 +1,7 @@
 {
   "name": "intelliticket-desktop",
   "version": "0.1.0",
-  "description": "IntelliTicket desktop MVP",
+  "description": "IntelliTicket role-based service desk client",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "npm run dev:web",

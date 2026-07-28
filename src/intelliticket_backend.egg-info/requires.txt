@@ -2,8 +2,19 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
+httpx>=0.27.0
+mcp==1.28.1
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+psycopg[binary]>=3.2.3
+celery[redis]>=5.4.0
+redis>=5.2.0
+python-multipart>=0.0.18
+prometheus-client>=0.21.1
 
 [dev]
-httpx>=0.27.0
 pytest>=8.2.0
 ruff>=0.5.0
+
+[loadtest]
+locust<3,>=2.32.0
